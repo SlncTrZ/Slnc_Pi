@@ -166,6 +166,8 @@ Remaining implementation questions:
 
 ## Next Actions
 
-- Inspect pi extension APIs/examples for persistent app settings, interactive-mode detection, assistant streaming event semantics, command autocomplete, and local asset path handling.
-- After explicit implementation approval, add the notification extension and bundled beep asset.
-- Run or provide local smoke-check steps.
+- Implemented `extensions/notification.ts` with `/notification` command, persistent mode storage, interactive-input gating, final assistant response filtering, bundled beep playback, and Windows System.Speech TTS queueing.
+- Adjusted beep timing to trigger on the first assistant text stream event, with message-end playback retained only as a fallback for non-streaming/edge cases.
+- Added `extensions/notification/beep.wav` as the bundled 1000 Hz / 0.5 second beep asset.
+- Smoke checked extension loading in print mode with `pi -e ./extensions/notification.ts -p "say ok"`; output was `ok`, confirming no audio ran in print mode.
+- Remaining manual validation: run in interactive pi, use `/notification status|beep|tts|both|off`, verify persistence after `/reload`/restart, and confirm beep/TTS behavior on normal and tool-using prompts.
