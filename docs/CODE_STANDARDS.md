@@ -20,6 +20,21 @@ Baseline standards for this pi package repository.
 - Prefer user-configurable constants at the top of small extensions before introducing complex config systems.
 - Do not require global machine changes unless documented and explicitly requested.
 
+## Multi-Agent Checkpoint Workflow
+- After committing a shared starting state, create and push a named base tag for all agents to start from.
+- Create one branch per agent from the base tag.
+- Commit each agent's work on its own branch and push that branch for review.
+- Use git worktrees when multiple agent attempts need separate local folders at the same time.
+- Keep checkpoint names descriptive, for example `notification-plan-base` and `agent-1-notification`.
+
+Example:
+
+```bash
+git tag notification-plan-base
+git push origin notification-plan-base
+git checkout -B agent-1-notification notification-plan-base
+```
+
 ## Validation
 - Validate extension loading with `pi install ./pi-extensions` or an equivalent local path, then `/reload` after edits.
 - For behavior changes, include a manual smoke-check command or flow in the feature plan or README.
