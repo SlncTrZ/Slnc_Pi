@@ -14,6 +14,21 @@ pi install ./pi-extensions
 pi remove ./pi-extensions
 ```
 
+## Usage
+
+### Notification Extension
+Enable audio notifications for assistant responses.
+
+**Setup:**
+1. Set a notification mode: `/notification tts`, `/notification beep`, or `/notification both`.
+2. (Optional) Configure a TTS engine: `/notification tts-engine <engine>`
+   - `fish`: High-quality streaming (requires API key).
+   - `openai-compatible`: OpenAI-compatible providers (requires API key).
+   - `windows-native`: Local Windows SAPI (no key required).
+
+**Commands:**
+Use `/notification` to view status or configure settings (engines, keys, and voices). Run `/notification test-tts` to verify audio.
+
 ## Structure
 
 - `extensions/` — TypeScript extensions (auto-discovered)
