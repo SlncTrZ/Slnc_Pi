@@ -4,7 +4,8 @@ import { execFile, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { connect as connectTls, type TLSSocket } from "node:tls";
 import { randomBytes } from "node:crypto";
-import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { openMenu, type MenuItem } from "./menu";
 
 type NotificationMode = "off" | "beep" | "tts" | "both";
 type TtsEngine = "fish" | "openai-compatible" | "windows-native";
@@ -32,7 +33,7 @@ type NotificationSettings = {
 const MODES = ["off", "beep", "tts", "both"] as const;
 const TTS_ENGINES = ["fish", "openai-compatible", "windows-native"] as const;
 const SETTINGS_PATH = join(getAgentDir(), "notification.json");
-const BEEP_PATH = join(__dirname, "notification", "beep.wav");
+const BEEP_PATH = join(__dirname, "beep.wav");
 const STATUS_KEY = "notification";
 const DEFAULT_FISH_REFERENCE_ID = "6d370109274d4c29ab83ad6b6af77978";
 const DEFAULT_FISH_MODEL = "s2-pro";
@@ -731,16 +732,6 @@ function stripMarkdownForSpeech(markdown: string): string {
 	return text;
 }
 
-function splitIntoSentenceChunks(text: string): string[] {
-	const chunks: string[] = [];
-	const pattern = /[^.!?\n]+(?:[.!?]+|\n+|$)/g;
-	for (const match of text.matchAll(pattern)) {
-		const chunk = match[0].trim();
-		if (chunk) chunks.push(chunk);
-	}
-	return chunks;
-}
-
 function getAssistantText(message: unknown): string {
 	const content = (message as { content?: unknown }).content;
 	if (!Array.isArray(content)) return "";
@@ -834,8 +825,6 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	let mode = settings.mode ?? "off";
 	let currentAgentIsInteractive = false;
 	let nextAgentIsInteractive = false;
-	let activeAssistantMessageHasToolCall = false;
-	let beepPlayedForAgent = false;
 	const tts = new TtsQueue(() => settings);
 
 	pi.registerFlag("notification", {
@@ -866,33 +855,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	pi.on("agent_start", async (_event, ctx) => {
 		currentAgentIsInteractive = nextAgentIsInteractive && ctx.hasUI;
 		nextAgentIsInteractive = false;
-		activeAssistantMessageHasToolCall = false;
-		beepPlayedForAgent = false;
 		tts.setContext(ctx);
-	});
-
-	pi.on("message_start", async (event) => {
-		if (event.message.role !== "assistant") return;
-		activeAssistantMessageHasToolCall = false;
-	});
-
-	pi.on("message_update", async (event, ctx) => {
-		if (!currentAgentIsInteractive) return;
-		if (mode !== "beep" && mode !== "both") return;
-		if (event.message.role !== "assistant") return;
-
-		const streamEventType = (event.assistantMessageEvent as { type?: string } | undefined)?.type;
-		if (streamEventType?.startsWith("toolcall_")) {
-			activeAssistantMessageHasToolCall = true;
-			return;
-		}
-		if (activeAssistantMessageHasToolCall || beepPlayedForAgent) return;
-		if (streamEventType !== "text_start" && streamEventType !== "text_delta") return;
-
-		beepPlayedForAgent = true;
-		void playBeep().catch((error) => {
-			notifyFailure(ctx, `Beep notification failed: ${formatError(error)}`);
-		});
 	});
 
 	pi.on("message_end", async (event, ctx) => {
@@ -904,7 +867,9 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		const stopReason = (event.message as { stopReason?: string }).stopReason;
 		if (stopReason !== "stop" && stopReason !== "length") return;
 
-		if ((mode === "beep" || mode === "both") && !beepPlayedForAgent) {
+		// Beep and TTS both fire at the end of the final narrative response.
+		// This avoids the beep playing mid-stream before the model is done.
+		if (mode === "beep" || mode === "both") {
 			try {
 				await playBeep();
 			} catch (error) {
@@ -939,179 +904,237 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		updateStatus(ctx, mode);
 	});
 
-	pi.registerCommand("notification", {
-		description: "Configure response notifications and TTS engines",
-		getArgumentCompletions: (prefix: string) => {
-			const items = [
-				"status",
-				...MODES,
-				"tts-engine",
-				...TTS_ENGINES,
-				"tts-key",
-				"fish-reference",
-				"openai-url",
-				"openai-model",
-				"openai-voice",
-				"clear-key",
-				"test-tts",
-				"test-beep",
-			].map((value) => ({ value, label: value }));
-			const filtered = items.filter((item) => item.value.startsWith(prefix.trim().toLowerCase()));
-			return filtered.length > 0 ? filtered : null;
-		},
-		handler: async (args, ctx) => {
-			const raw = (args ?? "").trim();
-			const [command = "status", ...rest] = raw.split(/\s+/);
-			const normalizedCommand = command.toLowerCase();
+	// ── Menu tree factory ──────────────────────────────────────
 
-			if (!raw || normalizedCommand === "status") {
-				ctx.ui.notify(getStatus(settings), "info");
-				updateStatus(ctx, mode);
-				return;
+	function buildMenuTree(): MenuItem[] {
+		const currentMode = settings.mode ?? "off";
+		const currentEngine = settings.ttsEngine ?? "fish";
+		const fishRef = settings.fish?.referenceId ?? DEFAULT_FISH_REFERENCE_ID;
+		const fishModel = settings.fish?.model ?? DEFAULT_FISH_MODEL;
+		const oaUrl = settings.openAiCompatible?.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
+		const oaModel = settings.openAiCompatible?.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL;
+		const oaVoice = settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE;
+
+		return [
+			{
+				type: "submenu",
+				id: "mode",
+				label: "Mode",
+				children: () =>
+					MODES.map((m) => ({
+						type: "action" as const,
+						id: `mode:${m}`,
+						label: m === currentMode ? `▸ ${m} (current)` : m,
+					})),
+			},
+			{
+				type: "submenu",
+				id: "engine",
+				label: "Engine",
+				children: () => [
+					{
+						type: "submenu",
+						id: "engine:fish",
+						label: currentEngine === "fish" ? "▸ fish (current)" : "fish",
+						children: () => [
+							{ type: "action", id: "engine-set:fish", label: "Select fish" },
+							{ type: "input", id: "fish:set-key", label: "Set API key", prompt: "Fish Audio API key:", isSecret: true, currentValue: getFishApiKey(settings) ? "••••••••" : "not set" },
+							{ type: "action", id: "fish:clear-key", label: "Clear API key" },
+							{ type: "input", id: "fish:set-reference", label: "Set reference ID", prompt: "Fish Audio reference_id:", currentValue: fishRef },
+							{ type: "input", id: "fish:set-model", label: "Set model", prompt: "Fish Audio model:", currentValue: fishModel },
+						],
+					},
+					{
+						type: "submenu",
+						id: "engine:openai",
+						label: currentEngine === "openai-compatible" ? "▸ openai-compatible (current)" : "openai-compatible",
+						children: () => [
+							{ type: "action", id: "engine-set:openai-compatible", label: "Select openai-compatible" },
+							{ type: "input", id: "openai:set-key", label: "Set API key", prompt: "OpenAI-compatible API key:", isSecret: true, currentValue: getOpenAiCompatibleApiKey(settings) ? "••••••••" : "not set" },
+							{ type: "action", id: "openai:clear-key", label: "Clear API key" },
+							{ type: "input", id: "openai:set-url", label: "Set base URL", prompt: "OpenAI-compatible base URL:", currentValue: oaUrl },
+							{ type: "input", id: "openai:set-model", label: "Set model", prompt: "OpenAI-compatible model:", currentValue: oaModel },
+							{ type: "input", id: "openai:set-voice", label: "Set voice", prompt: "OpenAI-compatible voice:", currentValue: oaVoice },
+						],
+					},
+					{
+						type: "submenu",
+						id: "engine:windows",
+						label: currentEngine === "windows-native" ? "▸ windows-native (current)" : "windows-native",
+						children: () => [
+							{ type: "action", id: "engine-set:windows-native", label: "Select windows-native" },
+						],
+					},
+				],
+			},
+			{
+				type: "submenu",
+				id: "debug",
+				label: "Debug",
+				children: () => [
+					{ type: "action", id: "debug:test-beep", label: "Test beep" },
+					{ type: "action", id: "debug:test-tts", label: "Test TTS" },
+				],
+			},
+			{ type: "action", id: "status", label: "Status" },
+		];
+	}
+
+	// ── Menu action handler ────────────────────────────────────
+
+	async function handleMenuAction(id: string, value?: string): Promise<void> {
+		const ctx = getCurrentCtx();
+
+		// Mode
+		if (id.startsWith("mode:")) {
+			const m = id.slice(5) as NotificationMode;
+			setMode(m, ctx);
+			if (ctx) ctx.ui.notify(`Mode set to ${m}`, "info");
+			return;
+		}
+
+		// Engine selection
+		if (id.startsWith("engine-set:")) {
+			const e = id.slice(11);
+			if (isTtsEngine(e)) {
+				settings.ttsEngine = e;
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify(`Engine set to ${e}`, "info");
 			}
+			return;
+		}
 
-			if (isNotificationMode(normalizedCommand)) {
-				setMode(normalizedCommand, ctx);
-				ctx.ui.notify(`Notification mode set to ${normalizedCommand}`, "info");
-				return;
+		// Fish config
+		if (id === "fish:set-key") {
+			if (value && value !== "••••••••" && value !== "not set") {
+				settings.fish = { ...settings.fish, apiKey: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("Fish Audio API key saved", "info");
 			}
-
-			if (normalizedCommand === "test-beep") {
-				try {
-					await playBeep();
-					ctx.ui.notify("Beep test completed", "info");
-				} catch (error) {
-					notifyFailure(ctx, `Beep test failed: ${formatError(error)}`);
-				}
-				return;
+			return;
+		}
+		if (id === "fish:clear-key") {
+			settings.fish = { ...settings.fish, apiKey: undefined };
+			persistSettings(ctx);
+			if (ctx) ctx.ui.notify("Fish Audio API key cleared", "info");
+			return;
+		}
+		if (id === "fish:set-reference") {
+			if (value) {
+				settings.fish = { ...settings.fish, referenceId: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("Fish reference_id updated", "info");
 			}
+			return;
+		}
+		if (id === "fish:set-model") {
+			if (value) {
+				settings.fish = { ...settings.fish, model: value as "s2-pro" };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("Fish model updated", "info");
+			}
+			return;
+		}
 
-			if (normalizedCommand === "test-tts") {
-				const text = rest.join(" ").trim() || "This is a notification TTS test.";
-				let diagnostic: { path: string; bytes: number } | undefined;
-				try {
-					ctx.ui.notify(`Testing ${settings.ttsEngine ?? "fish"} TTS...`, "info");
-					if (settings.ttsEngine === "windows-native") {
-						if (process.platform !== "win32") throw new Error("Windows Native TTS is only available on Windows.");
-						await runPowerShell(`Add-Type -AssemblyName System.Speech;
+		// OpenAI-compatible config
+		if (id === "openai:set-key") {
+			if (value && value !== "••••••••" && value !== "not set") {
+				settings.openAiCompatible = { ...settings.openAiCompatible, apiKey: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("OpenAI-compatible API key saved", "info");
+			}
+			return;
+		}
+		if (id === "openai:clear-key") {
+			settings.openAiCompatible = { ...settings.openAiCompatible, apiKey: undefined };
+			persistSettings(ctx);
+			if (ctx) ctx.ui.notify("OpenAI-compatible API key cleared", "info");
+			return;
+		}
+		if (id === "openai:set-url") {
+			if (value) {
+				settings.openAiCompatible = { ...settings.openAiCompatible, baseUrl: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("OpenAI-compatible base URL updated", "info");
+			}
+			return;
+		}
+		if (id === "openai:set-model") {
+			if (value) {
+				settings.openAiCompatible = { ...settings.openAiCompatible, model: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("OpenAI-compatible model updated", "info");
+			}
+			return;
+		}
+		if (id === "openai:set-voice") {
+			if (value) {
+				settings.openAiCompatible = { ...settings.openAiCompatible, voice: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("OpenAI-compatible voice updated", "info");
+			}
+			return;
+		}
+
+		// Debug
+		if (id === "debug:test-beep") {
+			try {
+				await playBeep();
+				if (ctx) ctx.ui.notify("Beep test completed", "info");
+			} catch (error) {
+				notifyFailure(ctx, `Beep test failed: ${formatError(error)}`);
+			}
+			return;
+		}
+		if (id === "debug:test-tts") {
+			const text = "This is a notification TTS test.";
+			let diagnostic: { path: string; bytes: number } | undefined;
+			try {
+				if (ctx) ctx.ui.notify(`Testing ${settings.ttsEngine ?? "fish"} TTS...`, "info");
+				if (settings.ttsEngine === "windows-native") {
+					if (process.platform !== "win32") throw new Error("Windows Native TTS is only available on Windows.");
+					await runPowerShell(`Add-Type -AssemblyName System.Speech;
 $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;
 $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
-					} else if (settings.ttsEngine === "openai-compatible") {
-						diagnostic = await synthesizeDiagnosticWav(text, settings);
-						ctx.ui.notify(`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`, "info");
-						await playTtsWav(diagnostic.path);
-					} else {
-						ctx.ui.notify("Opening Fish Audio streaming TTS WebSocket...", "info");
-						await streamFishPcmToFfplay(text, settings);
-					}
-					ctx.ui.notify("TTS test completed", "info");
-				} catch (error) {
-					notifyFailure(ctx, `TTS test failed: ${formatError(error)}`);
-				} finally {
-					if (diagnostic) deleteFileBestEffort(diagnostic.path);
+				} else if (settings.ttsEngine === "openai-compatible") {
+					diagnostic = await synthesizeDiagnosticWav(text, settings);
+					if (ctx) ctx.ui.notify(`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`, "info");
+					await playTtsWav(diagnostic.path);
+				} else {
+					if (ctx) ctx.ui.notify("Opening Fish Audio streaming TTS WebSocket...", "info");
+					await streamFishPcmToFfplay(text, settings);
 				}
-				return;
+				if (ctx) ctx.ui.notify("TTS test completed", "info");
+			} catch (error) {
+				notifyFailure(ctx, `TTS test failed: ${formatError(error)}`);
+			} finally {
+				if (diagnostic) deleteFileBestEffort(diagnostic.path);
 			}
+			return;
+		}
 
-			if (normalizedCommand === "tts-engine") {
-				const engine = rest[0]?.toLowerCase();
-				if (!engine || engine === "status") {
-					ctx.ui.notify(`TTS engine: ${settings.ttsEngine ?? "fish"}`, "info");
-					return;
-				}
-				if (!isTtsEngine(engine)) {
-					ctx.ui.notify(`Unknown TTS engine "${rest[0]}". Use: ${TTS_ENGINES.join(", ")}`, "error");
-					return;
-				}
-				settings.ttsEngine = engine;
-				persistSettings(ctx);
-				ctx.ui.notify(`TTS engine set to ${engine}`, "info");
-				return;
-			}
+		// Status
+		if (id === "status") {
+			if (ctx) ctx.ui.notify(getStatus(settings), "info");
+			updateStatus(ctx, mode);
+			return;
+		}
+	}
 
-			if (normalizedCommand === "tts-key") {
-				const engine = rest[0]?.toLowerCase();
-				const key = rest.slice(1).join(" ").trim();
-				if (!isTtsEngine(engine ?? "")) {
-					ctx.ui.notify(`Usage: /notification tts-key <${TTS_ENGINES.join("|")}> <api-key>`, "error");
-					return;
-				}
-				if (!key) {
-					ctx.ui.notify("Usage: /notification tts-key <engine> <api-key>", "error");
-					return;
-				}
-				if (engine === "fish") settings.fish = { ...settings.fish, apiKey: key };
-				else settings.openAiCompatible = { ...settings.openAiCompatible, apiKey: key };
-				persistSettings(ctx);
-				ctx.ui.notify(`${engine} API key saved`, "info");
-				return;
-			}
+	// ── Command registration ───────────────────────────────────
 
-			if (normalizedCommand === "clear-key") {
-				const engine = rest[0]?.toLowerCase();
-				if (!isTtsEngine(engine ?? "")) {
-					ctx.ui.notify(`Usage: /notification clear-key <${TTS_ENGINES.join("|")}>`, "error");
-					return;
-				}
-				if (engine === "fish") settings.fish = { ...settings.fish, apiKey: undefined };
-				else settings.openAiCompatible = { ...settings.openAiCompatible, apiKey: undefined };
-				persistSettings(ctx);
-				ctx.ui.notify(`${engine} stored API key cleared`, "info");
-				return;
-			}
+	let currentCtx: ExtensionCommandContext | undefined;
 
-			if (normalizedCommand === "fish-reference") {
-				const referenceId = rest.join(" ").trim();
-				if (!referenceId) {
-					ctx.ui.notify(`Fish reference_id: ${settings.fish?.referenceId ?? DEFAULT_FISH_REFERENCE_ID}`, "info");
-					return;
-				}
-				settings.fish = { ...settings.fish, referenceId };
-				persistSettings(ctx);
-				ctx.ui.notify("Fish reference_id updated", "info");
-				return;
-			}
+	function getCurrentCtx(): ExtensionCommandContext | undefined {
+		return currentCtx;
+	}
 
-			if (normalizedCommand === "openai-url") {
-				const baseUrl = rest.join(" ").trim();
-				if (!baseUrl) {
-					ctx.ui.notify(`OpenAI-compatible base URL: ${settings.openAiCompatible?.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL}`, "info");
-					return;
-				}
-				settings.openAiCompatible = { ...settings.openAiCompatible, baseUrl };
-				persistSettings(ctx);
-				ctx.ui.notify("OpenAI-compatible base URL updated", "info");
-				return;
-			}
-
-			if (normalizedCommand === "openai-model") {
-				const model = rest.join(" ").trim();
-				if (!model) {
-					ctx.ui.notify(`OpenAI-compatible model: ${settings.openAiCompatible?.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL}`, "info");
-					return;
-				}
-				settings.openAiCompatible = { ...settings.openAiCompatible, model };
-				persistSettings(ctx);
-				ctx.ui.notify("OpenAI-compatible model updated", "info");
-				return;
-			}
-
-			if (normalizedCommand === "openai-voice") {
-				const voice = rest.join(" ").trim();
-				if (!voice) {
-					ctx.ui.notify(`OpenAI-compatible voice: ${settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE}`, "info");
-					return;
-				}
-				settings.openAiCompatible = { ...settings.openAiCompatible, voice };
-				persistSettings(ctx);
-				ctx.ui.notify("OpenAI-compatible voice updated", "info");
-				return;
-			}
-
-			ctx.ui.notify(
-				`Unknown notification command "${command}". Use status, ${MODES.join("|")}, tts-engine, tts-key, clear-key, fish-reference, openai-url, openai-model, openai-voice, test-tts, or test-beep.`,
-				"error",
-			);
+	pi.registerCommand("notification", {
+		description: "Configure response notifications and TTS engines (interactive menu)",
+		handler: async (_args, ctx) => {
+			currentCtx = ctx;
+			await openMenu(ctx, "Notification", buildMenuTree, handleMenuAction);
+			currentCtx = undefined;
 		},
 	});
 }

@@ -1,10 +1,21 @@
 {
   "name": "pi-extensions",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "private": true,
   "pi": {
-    "extensions": ["./extensions"],
-    "skills": ["./skills"],
-    "prompts": ["./prompts"]
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1"
   }
 }

@@ -20,20 +20,44 @@ pi remove ./pi-extensions
 Enable audio notifications for assistant responses.
 
 **Setup:**
-1. Set a notification mode: `/notification tts`, `/notification beep`, or `/notification both`.
-2. (Optional) Configure a TTS engine: `/notification tts-engine <engine>`
-   - `fish`: High-quality streaming (requires API key).
-   - `openai-compatible`: OpenAI-compatible providers (requires API key).
-   - `windows-native`: Local Windows SAPI (no key required).
+Run `/notification` to open the interactive configuration menu. Navigate with ↑↓, press Enter to select or drill into submenus, and Escape to go back.
 
-**Commands:**
-Use `/notification` to view status or configure settings (engines, keys, and voices). Run `/notification test-tts` to verify audio.
+**Menu structure:**
+- **Mode** — Choose `off`, `beep`, `tts`, or `both`
+- **Engine** — Select and configure a TTS engine:
+  - `fish` — High-quality streaming TTS via Fish Audio WebSocket (requires API key)
+  - `openai-compatible` — OpenAI-compatible `/v1/audio/speech` providers (requires API key)
+  - `windows-native` — Local Windows SAPI (no key required, Windows only)
+- **Debug** — Test beep playback and TTS synthesis
+- **Status** — Show current configuration summary
+
+**Startup flag:**
+Override the notification mode at launch:
+```bash
+pi --notification beep   # or tts, both, off
+```
+
+See `docs/CONFIG.md` for environment variables, defaults, and settings file details.
+
+### Emote Extension
+Change the active pi-emote face set from inside pi:
+
+```text
+/emote list
+/emote set aza_choi_nobg
+```
+
+The `/emote set` argument autocompletes from the emote sets available in `extensions/pi-emote/emotes/` plus any user or project pi-emote emote folders. The selected default is saved to `~/.pi/agent/extensions/pi-emote/config.json` and applied immediately in the current session.
 
 ## Structure
 
-- `extensions/` — TypeScript extensions (auto-discovered)
+- `extensions/` — Extension package directories. Each subdirectory can include its own `package.json` with a `pi.extensions` entry.
+  - `extensions/notification/` — Local notification extension package.
+  - `extensions/pi-emote/` — Vendored third-party pi-emote extension package.
 - `skills/` — Skill directories with `SKILL.md`
 - `prompts/` — Prompt template Markdown files
+
+The root `package.json` points pi at `./extensions`; pi discovers one level of extension subdirectories and honors each subpackage's `pi.extensions` manifest. This keeps `pi install .` as the single local install command.
 
 ## Multi-Agent Checkpoint Workflow
 
