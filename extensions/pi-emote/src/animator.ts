@@ -41,6 +41,7 @@ export class Animator {
   private talkStartTime = 0;
   private lastTokenTime = 0;
   private talkMouthClosed = false;
+  private ttsTalkActive = false;
 
   constructor(config: Config, renderer: Renderer) {
     this.config = config;
@@ -216,6 +217,10 @@ export class Animator {
 
     this.talkTimer = setInterval(() => {
       if (this.currentState !== "talk") return;
+      if (this.ttsTalkActive) {
+        // Steady rhythmic mouth animation during TTS playback
+        this.talkMouthClosed = !this.talkMouthClosed;
+      }
       if (this.talkMouthClosed) {
         this.renderer.showTalkCloseFrame();
       } else {
@@ -226,6 +231,7 @@ export class Animator {
 
   onTalkToken(text: string) {
     if (this.currentState !== "talk") return;
+    if (this.ttsTalkActive) return; // TTS drives animation, ignore tokens
 
     const words = text.split(/\s+/).filter((w) => w.length > 0).length;
     this.talkWordCount += words;
@@ -266,14 +272,25 @@ export class Animator {
 
   endTalk() {
     if (this.currentState !== "talk") return;
-    const targetDurationMs = (this.talkWordCount / this.config.readingSpeed) * 1000;
-    const elapsed = Date.now() - this.talkStartTime;
-    if (elapsed >= targetDurationMs) {
+    if (this.ttsTalkActive) return; // TTS owns talk state, wait for tts:end
+    // No TTS — go idle immediately when streaming finishes
+    this.transitionTo("idle");
+  }
+
+  /** Enter talk for TTS playback (called from tts:start event) */
+  enterTtsTalk() {
+    this.ttsTalkActive = true;
+    this.talkMouthClosed = false;
+    if (this.currentState !== "talk") {
+      this.transitionTo("talk");
+    }
+  }
+
+  /** Exit talk after TTS playback (called from tts:end event) */
+  exitTtsTalk() {
+    this.ttsTalkActive = false;
+    if (this.currentState === "talk") {
       this.transitionTo("idle");
-    } else {
-      // Streaming finished but reading time remains — keep mouth animating
-      if (this.talkGapTimer) { clearTimeout(this.talkGapTimer); this.talkGapTimer = null; }
-      this.talkMouthClosed = false;
     }
   }
 

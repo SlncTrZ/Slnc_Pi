@@ -81,6 +81,9 @@ export default function (pi: ExtensionAPI) {
   let { config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd);
   setDebug(config.debug);
 
+  // TTS mode from notification extension — suppresses streaming talk
+  let ttsModeEnabled = false;
+
   if (!config.enabled) return;
 
   // Emote set state
@@ -91,6 +94,24 @@ export default function (pi: ExtensionAPI) {
   let renderer = createRendererFromResolved(lastResolved, config.size);
 
   const animator = new Animator(config, renderer);
+
+  // --- TTS sync: listen for events from notification extension ---
+  // Registered at top level (before session_start) so we don't miss the tts:mode event.
+  pi.events.on("tts:mode", (data: unknown) => {
+    const m = (data as { mode?: string })?.mode;
+    ttsModeEnabled = m === "tts" || m === "both";
+    log(`tts:mode = ${m}`);
+  });
+  pi.events.on("tts:start", () => {
+    if (!widgetActive) return;
+    log("tts:start");
+    animator.enterTtsTalk();
+  });
+  pi.events.on("tts:end", () => {
+    if (!widgetActive) return;
+    log("tts:end");
+    animator.exitTtsTalk();
+  });
 
   function loadEmoteSet(setName: string) {
     currentEmoteSet = setName;
@@ -245,6 +266,7 @@ export default function (pi: ExtensionAPI) {
 
     widgetActive = true;
     setTimeout(() => animator.transitionTo("hi"), 500);
+
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
@@ -294,6 +316,9 @@ export default function (pi: ExtensionAPI) {
     if (streamEvent.type !== "text_delta") return;
     const text = streamEvent.delta;
     if (!text) return;
+
+    // When TTS is enabled, skip streaming talk — let tts:start handle it.
+    if (ttsModeEnabled) return;
 
     if (animator.currentState !== "talk") {
       animator.transitionTo("talk");

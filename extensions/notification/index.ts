@@ -3,12 +3,13 @@ import { dirname, join } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { connect as connectTls, type TLSSocket } from "node:tls";
+import { connect as connectNet, type Socket } from "node:net";
 import { randomBytes } from "node:crypto";
 import { getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { openMenu, type MenuItem } from "./menu";
 
 type NotificationMode = "off" | "beep" | "tts" | "both";
-type TtsEngine = "fish" | "openai-compatible" | "windows-native";
+type TtsEngine = "fish" | "openai-compatible" | "windows-native" | "vllm-omni";
 
 type FishSettings = {
 	apiKey?: string;
@@ -23,15 +24,24 @@ type OpenAiCompatibleSettings = {
 	voice?: string;
 };
 
+type VllmOmniSettings = {
+	baseUrl?: string;
+	audioPath?: string;
+	refTextPath?: string;
+	voiceCached?: boolean;
+	maxNewTokens?: number;
+};
+
 type NotificationSettings = {
 	mode?: NotificationMode;
 	ttsEngine?: TtsEngine;
 	fish?: FishSettings;
 	openAiCompatible?: OpenAiCompatibleSettings;
+	vllmOmni?: VllmOmniSettings;
 };
 
 const MODES = ["off", "beep", "tts", "both"] as const;
-const TTS_ENGINES = ["fish", "openai-compatible", "windows-native"] as const;
+const TTS_ENGINES = ["fish", "openai-compatible", "windows-native", "vllm-omni"] as const;
 const SETTINGS_PATH = join(getAgentDir(), "notification.json");
 const BEEP_PATH = join(__dirname, "beep.wav");
 const STATUS_KEY = "notification";
@@ -40,6 +50,9 @@ const DEFAULT_FISH_MODEL = "s2-pro";
 const DEFAULT_OPENAI_COMPATIBLE_BASE_URL = "http://localhost:8000/v1";
 const DEFAULT_OPENAI_COMPATIBLE_MODEL = "tts-1";
 const DEFAULT_OPENAI_COMPATIBLE_VOICE = "alloy";
+const DEFAULT_VLLM_OMNI_BASE_URL = "http://localhost:8091";
+const DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS = 256;
+const VLLM_OMNI_SAMPLE_RATE = 44100;
 const FISH_STREAM_SAMPLE_RATE = 44100;
 
 function isNotificationMode(value: string): value is NotificationMode {
@@ -75,6 +88,10 @@ function defaultSettings(): Required<Pick<NotificationSettings, "mode" | "ttsEng
 			model: DEFAULT_OPENAI_COMPATIBLE_MODEL,
 			voice: DEFAULT_OPENAI_COMPATIBLE_VOICE,
 		},
+		vllmOmni: {
+			baseUrl: DEFAULT_VLLM_OMNI_BASE_URL,
+			maxNewTokens: DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS,
+		},
 	};
 }
 
@@ -87,6 +104,7 @@ function normalizeSettings(settings: NotificationSettings): NotificationSettings
 		ttsEngine: settings.ttsEngine && isTtsEngine(settings.ttsEngine) ? settings.ttsEngine : defaults.ttsEngine,
 		fish: { ...defaults.fish, ...settings.fish },
 		openAiCompatible: { ...defaults.openAiCompatible, ...settings.openAiCompatible },
+		vllmOmni: { ...defaults.vllmOmni, ...settings.vllmOmni },
 	};
 }
 
@@ -186,6 +204,26 @@ function getFishApiKey(settings: NotificationSettings): string | undefined {
 
 function getOpenAiCompatibleApiKey(settings: NotificationSettings): string | undefined {
 	return getEnvValue(["PI_NOTIFICATION_OPENAI_TTS_API_KEY", "OPENAI_API_KEY"]) ?? settings.openAiCompatible?.apiKey?.trim();
+}
+
+function getVllmOmniBaseUrl(settings: NotificationSettings): string {
+	return settings.vllmOmni?.baseUrl?.trim() ?? DEFAULT_VLLM_OMNI_BASE_URL;
+}
+
+/** Derive a voice name from the audio file basename (e.g. "my_voice.wav" → "my_voice"). */
+function deriveVoiceName(audioPath: string): string {
+	const base = audioPath.split(/[/\\]/).pop() ?? "voice";
+	return base.replace(/\.[^.]+$/, "").replace(/[^\w-]/g, "_").slice(0, 64) || "voice";
+}
+
+/** Read the reference text from a file path, or return undefined. */
+function readRefTextFromPath(refTextPath: string | undefined): string | undefined {
+	if (!refTextPath || !existsSync(refTextPath)) return undefined;
+	try {
+		return readFileSync(refTextPath, "utf-8").trim();
+	} catch {
+		return undefined;
+	}
 }
 
 async function ensureOk(response: Response): Promise<void> {
@@ -651,6 +689,372 @@ async function streamFishPcmToFfplay(text: string, settings: NotificationSetting
 	});
 }
 
+async function uploadVllmOmniVoice(settings: NotificationSettings): Promise<string> {
+	const config = settings.vllmOmni ?? {};
+	const audioPath = config.audioPath?.trim();
+	if (!audioPath || !existsSync(audioPath)) {
+		throw new Error(
+			`vLLM-Omni: audio reference file not found at ${audioPath || "(not set)"}. Browse for it in the notification menu.`,
+		);
+	}
+
+	const voiceName = deriveVoiceName(audioPath);
+	const refText = readRefTextFromPath(config.refTextPath);
+	const baseUrl = getVllmOmniBaseUrl(settings);
+
+	const boundary = `----FormBoundary${randomBytes(16).toString("hex")}`;
+	const CRLF = "\r\n";
+
+	const readAudio = readFileSync(audioPath);
+	const audioName = audioPath.split(/[/\\]/).pop() ?? "audio.wav";
+
+	let body = Buffer.alloc(0);
+	const appendField = (name: string, value: string) => {
+		body = Buffer.concat([
+			body,
+			Buffer.from(`${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}`, "utf-8"),
+		]);
+	};
+
+	appendField("name", voiceName);
+	appendField("consent", "yes");
+	if (refText) appendField("ref_text", refText);
+
+	// Audio file part
+	const fileHeader = `${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="audio_sample"; filename="${audioName}"${CRLF}Content-Type: audio/wav${CRLF}${CRLF}`;
+	body = Buffer.concat([body, Buffer.from(fileHeader, "utf-8"), readAudio, Buffer.from(`${CRLF}--${boundary}--${CRLF}`, "utf-8")]);
+
+	const response = await fetch(joinUrl(baseUrl, "v1/audio/voices"), {
+		method: "POST",
+		headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+		body: body,
+	});
+	await ensureOk(response);
+
+	const data = (await response.json()) as { voice?: { name?: string }; name?: string; error?: string };
+	if (data.error) throw new Error(`vLLM-Omni voice upload error: ${data.error}`);
+	return data.voice?.name ?? data.name ?? voiceName;
+}
+
+function createVllmOmniWebSocket(
+	wsUrl: string,
+	onBinary: (data: Uint8Array) => void,
+	onClose: () => void,
+	onError: (error: Error) => void,
+): Promise<{ send: (json: string) => void; close: () => void }> {
+	const parsedUrl = new URL(wsUrl);
+	const host = parsedUrl.hostname;
+	const port = parsedUrl.port ? parseInt(parsedUrl.port, 10) : 80;
+	const path = parsedUrl.pathname || "/";
+
+	return new Promise((resolve, reject) => {
+		const key = randomBytes(16).toString("base64");
+		let buffer = Buffer.alloc(0);
+		let handshakeDone = false;
+		let settled = false;
+		let fragmented: Buffer[] = [];
+		let timeout: NodeJS.Timeout | undefined;
+
+		const socket = connectNet({ host, port });
+
+		const fail = (error: Error) => {
+			if (timeout) clearTimeout(timeout);
+			if (!settled) { settled = true; reject(error); }
+			else onError(error);
+			try { socket.destroy(); } catch {}
+		};
+
+		const sendFrame = (payload: Uint8Array, opcode = 0x2) => {
+			const frame = createWebSocketFrame(payload, opcode);
+			socket.write(frame);
+		};
+
+		const parseFrames = () => {
+			while (buffer.length >= 2) {
+				const first = buffer[0];
+				const second = buffer[1];
+				const fin = Boolean(first & 0x80);
+				const opcode = first & 0x0f;
+				const masked = Boolean(second & 0x80);
+				let length = second & 0x7f;
+				let offset = 2;
+				if (length === 126) {
+					if (buffer.length < 4) return;
+					length = buffer.readUInt16BE(2);
+					offset = 4;
+				} else if (length === 127) {
+					if (buffer.length < 10) return;
+					length = Number(buffer.readBigUInt64BE(2));
+					offset = 10;
+				}
+				if (masked) offset += 4;
+				if (buffer.length < offset + length) return;
+				const payload = buffer.subarray(offset, offset + length);
+				buffer = buffer.subarray(offset + length);
+				if (opcode === 0x8) { onClose(); return; }
+				if (opcode === 0x9) { sendFrame(payload, 0x0a); continue; }
+				if (opcode === 0x1 || opcode === 0x2 || opcode === 0x0) {
+					fragmented.push(Buffer.from(payload));
+					if (fin) {
+						const combined = Buffer.concat(fragmented);
+						fragmented = [];
+						if (opcode === 0x1) {
+							// JSON text frame — pass to caller
+							onBinary(combined); // reuse onBinary for dispatch
+						} else {
+							onBinary(combined);
+						}
+					}
+				}
+			}
+		};
+
+		timeout = setTimeout(() => fail(new Error("vLLM-Omni WebSocket connection timed out (30s)")), 30_000);
+
+		socket.on("connect", () => {
+			socket.write(
+				[
+					`GET ${path} HTTP/1.1`,
+					`Host: ${host}:${port}`,
+					"Upgrade: websocket",
+					"Connection: Upgrade",
+					`Sec-WebSocket-Key: ${key}`,
+					"Sec-WebSocket-Version: 13",
+					"",
+					"",
+				].join("\r\n"),
+			);
+		});
+
+		socket.on("data", (chunk) => {
+			buffer = Buffer.concat([buffer, chunk]);
+			if (!handshakeDone) {
+				const headerEnd = buffer.indexOf("\r\n\r\n");
+				if (headerEnd === -1) return;
+				const headers = buffer.subarray(0, headerEnd).toString("utf-8");
+				buffer = buffer.subarray(headerEnd + 4);
+				if (!headers.startsWith("HTTP/1.1 101") && !headers.startsWith("HTTP/1.0 101")) {
+					fail(new Error(`vLLM-Omni WebSocket handshake failed: ${headers.split("\r\n")[0]}`));
+					return;
+				}
+				handshakeDone = true;
+				if (timeout) clearTimeout(timeout);
+				settled = true;
+				resolve({
+					send: (json: string) => sendFrame(new TextEncoder().encode(json), 0x1),
+					close: () => {
+						try { sendFrame(new Uint8Array(), 0x8); socket.end(); } catch {}
+					},
+				});
+			}
+			parseFrames();
+		});
+
+		socket.on("error", fail);
+		socket.on("close", () => { if (timeout) clearTimeout(timeout); onClose(); });
+	});
+}
+
+async function streamVllmOmniPcmToFfplay(text: string, settings: NotificationSettings): Promise<void> {
+	const config = settings.vllmOmni ?? {};
+	const baseUrl = getVllmOmniBaseUrl(settings);
+	const refText = readRefTextFromPath(config.refTextPath);
+	const maxNewTokens = config.maxNewTokens ?? DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS;
+
+	const wsHost = baseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+	const wsUrl = `ws://${wsHost}/v1/audio/speech/stream`;
+
+	// Upload voice reference
+	const resolvedVoice = await uploadVllmOmniVoice(settings);
+
+	const player = spawn("ffplay", [
+		"-nodisp", "-autoexit", "-loglevel", "error",
+		"-f", "s16le",
+		"-ar", String(VLLM_OMNI_SAMPLE_RATE),
+		"-ac", "1",
+		"-i", "pipe:0",
+	], {
+		windowsHide: true,
+		stdio: ["pipe", "ignore", "pipe"],
+	});
+	let playerError = "";
+	player.stderr?.on("data", (chunk) => { playerError += String(chunk); });
+
+	await new Promise<void>((resolve, reject) => {
+		let settled = false;
+		let finished = false;
+		let ws: { send: (json: string) => void; close: () => void } | undefined;
+
+		const settle = (error?: Error) => {
+			if (settled) return;
+			settled = true;
+			try { ws?.close(); } catch {}
+			try { player.stdin?.end(); } catch {}
+			if (error) reject(error);
+			else resolve();
+		};
+
+		player.once("error", (error) => settle(error));
+		player.once("exit", (code) => {
+			if (settled) return;
+			if (code === 0 || finished) settle();
+			else settle(new Error(`ffplay exited with code ${code}${playerError.trim() ? `: ${playerError.trim()}` : ""}`));
+		});
+
+		void createVllmOmniWebSocket(
+			wsUrl,
+			(raw) => {
+				try {
+					// Try parsing as JSON to detect control messages
+					let isJson = false;
+					let event: Record<string, unknown> | undefined;
+					try {
+						const str = new TextDecoder().decode(raw);
+						event = JSON.parse(str);
+						isJson = true;
+					} catch {}
+
+					if (isJson && event) {
+						const etype = String(event.type);
+						if (etype === "session.done") {
+							finished = true;
+							player.stdin?.end();
+						} else if (etype === "error") {
+							settle(new Error(`vLLM-Omni server error: ${event.message ?? String(event)}`));
+						}
+					} else {
+						// Binary audio frame — pipe to ffplay
+						player.stdin?.write(Buffer.from(raw));
+					}
+				} catch (error) {
+					settle(error instanceof Error ? error : new Error(String(error)));
+				}
+			},
+			() => {
+				if (!finished) settle(new Error("vLLM-Omni WebSocket closed before session.done."));
+			},
+			(error) => settle(error),
+		).then((socket) => {
+			ws = socket;
+			// 1. session.config (must be first)
+			ws.send(JSON.stringify({
+				type: "session.config",
+				voice: resolvedVoice,
+				ref_text: refText,
+				response_format: "pcm",
+				stream_audio: true,
+				max_new_tokens: maxNewTokens,
+			}));
+			// 2. input.text
+			ws.send(JSON.stringify({ type: "input.text", text }));
+			// 3. input.done
+			ws.send(JSON.stringify({ type: "input.done" }));
+		}).catch((error) => settle(error instanceof Error ? error : new Error(String(error))));
+	});
+}
+
+function createWavHeader(sampleRate: number, numSamples: number): Uint8Array {
+	const dataSize = numSamples * 2; // 16-bit mono
+	const fileSize = 36 + dataSize;
+	const header = new Uint8Array(44);
+	const view = new DataView(header.buffer);
+	// RIFF header
+	header[0] = 0x52; header[1] = 0x49; header[2] = 0x46; header[3] = 0x46; // "RIFF"
+	view.setUint32(4, fileSize, false); // big-endian file size
+	header[8] = 0x57; header[9] = 0x41; header[10] = 0x56; header[11] = 0x45; // "WAVE"
+	// fmt chunk
+	header[12] = 0x66; header[13] = 0x6d; header[14] = 0x74; header[15] = 0x20; // "fmt "
+	view.setUint32(16, 16, true); // chunk size
+	view.setUint16(20, 1, true); // PCM
+	view.setUint16(22, 1, true); // mono
+	view.setUint32(24, sampleRate, true);
+	view.setUint32(28, sampleRate * 2, true); // byte rate
+	view.setUint16(32, 2, true); // block align
+	view.setUint16(34, 16, true); // bits per sample
+	// data chunk
+	header[36] = 0x64; header[37] = 0x61; header[38] = 0x74; header[39] = 0x61; // "data"
+	view.setUint32(40, dataSize, true);
+	return header;
+}
+
+async function synthesizeVllmOmniWav(text: string, settings: NotificationSettings): Promise<Uint8Array> {
+	const config = settings.vllmOmni ?? {};
+	const baseUrl = getVllmOmniBaseUrl(settings);
+	const refText = readRefTextFromPath(config.refTextPath);
+	const maxNewTokens = config.maxNewTokens ?? DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS;
+
+	const wsHost = baseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+	const wsUrl = `ws://${wsHost}/v1/audio/speech/stream`;
+
+	// Upload voice reference
+	const resolvedVoice = await uploadVllmOmniVoice(settings);
+
+	const pcmChunks: Buffer[] = [];
+
+	await new Promise<void>((resolve, reject) => {
+		let settled = false;
+		let ws: { send: (json: string) => void; close: () => void } | undefined;
+
+		const settle = (error?: Error) => {
+			if (settled) return;
+			settled = true;
+			try { ws?.close(); } catch {}
+			if (error) reject(error);
+			else resolve();
+		};
+
+		void createVllmOmniWebSocket(
+			wsUrl,
+			(raw) => {
+				try {
+					let isJson = false;
+					let event: Record<string, unknown> | undefined;
+					try {
+						const str = new TextDecoder().decode(raw);
+						event = JSON.parse(str);
+						isJson = true;
+					} catch {}
+
+					if (isJson && event) {
+						const etype = String(event.type);
+						if (etype === "session.done") {
+							settle();
+						} else if (etype === "error") {
+							settle(new Error(`vLLM-Omni server error: ${event.message ?? String(event)}`));
+						}
+					} else {
+						pcmChunks.push(Buffer.from(raw));
+					}
+				} catch (error) {
+					settle(error instanceof Error ? error : new Error(String(error)));
+				}
+			},
+			() => {
+				if (pcmChunks.length === 0) settle(new Error("vLLM-Omni WebSocket closed with no audio data."));
+				else settle();
+			},
+			(error) => settle(error),
+		).then((socket) => {
+			ws = socket;
+			ws.send(JSON.stringify({
+				type: "session.config",
+				voice: resolvedVoice,
+				ref_text: refText,
+				response_format: "pcm",
+				stream_audio: true,
+				max_new_tokens: maxNewTokens,
+			}));
+			ws.send(JSON.stringify({ type: "input.text", text }));
+			ws.send(JSON.stringify({ type: "input.done" }));
+		}).catch((error) => settle(error instanceof Error ? error : new Error(String(error))));
+	});
+
+	const pcmData = Buffer.concat(pcmChunks);
+	const numSamples = pcmData.length / 2;
+	const header = createWavHeader(VLLM_OMNI_SAMPLE_RATE, numSamples);
+	return new Uint8Array(Buffer.concat([header, pcmData]));
+}
+
 function joinUrl(baseUrl: string, path: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
@@ -689,6 +1093,11 @@ $speak.Speak('${escapePowerShellSingleQuoted(cleaned)}');`);
 		return;
 	}
 
+	if (settings.ttsEngine === "vllm-omni") {
+		await streamVllmOmniPcmToFfplay(cleaned, settings);
+		return;
+	}
+
 	if (settings.ttsEngine !== "openai-compatible") {
 		await streamFishPcmToFfplay(cleaned, settings);
 		return;
@@ -706,7 +1115,14 @@ $speak.Speak('${escapePowerShellSingleQuoted(cleaned)}');`);
 async function synthesizeDiagnosticWav(text: string, settings: NotificationSettings): Promise<{ path: string; bytes: number }> {
 	const cleaned = text.trim();
 	if (!cleaned) throw new Error("No TTS text provided.");
-	const audioBytes = settings.ttsEngine === "openai-compatible" ? await synthesizeOpenAiCompatibleWav(cleaned, settings) : await synthesizeFishWav(cleaned, settings);
+	let audioBytes: Uint8Array;
+	if (settings.ttsEngine === "openai-compatible") {
+		audioBytes = await synthesizeOpenAiCompatibleWav(cleaned, settings);
+	} else if (settings.ttsEngine === "vllm-omni") {
+		audioBytes = await synthesizeVllmOmniWav(cleaned, settings);
+	} else {
+		audioBytes = await synthesizeFishWav(cleaned, settings);
+	}
 	const path = writeTempWav(audioBytes);
 	return { path, bytes: audioBytes.length };
 }
@@ -767,6 +1183,10 @@ function getStatus(settings: NotificationSettings): string {
 		`OpenAI-compatible base URL: ${settings.openAiCompatible?.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL}`,
 		`OpenAI-compatible model: ${settings.openAiCompatible?.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL}`,
 		`OpenAI-compatible voice: ${settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE}`,
+		`vLLM-Omni base URL: ${settings.vllmOmni?.baseUrl ?? DEFAULT_VLLM_OMNI_BASE_URL}`,
+		`vLLM-Omni audio: ${settings.vllmOmni?.audioPath ?? "not set"}`,
+		`vLLM-Omni transcript: ${settings.vllmOmni?.refTextPath ?? "not set"}`,
+		`vLLM-Omni voice cached: ${settings.vllmOmni?.voiceCached ? "yes" : "no"}`,
 	].join("\n");
 }
 
@@ -775,6 +1195,7 @@ class TtsQueue {
 	private running = false;
 	private ctx: ExtensionContext | undefined;
 	private getSettings: () => NotificationSettings;
+	private events: any = null;
 
 	constructor(getSettings: () => NotificationSettings) {
 		this.getSettings = getSettings;
@@ -784,9 +1205,16 @@ class TtsQueue {
 		this.ctx = ctx;
 	}
 
+	setEvents(events: any): void {
+		this.events = events;
+	}
+
 	enqueue(text: string): void {
 		const cleaned = stripMarkdownForSpeech(text);
 		if (!cleaned) return;
+
+		// Signal emote to enter talk state synchronously, before agent_end fires.
+		this.events?.emit("tts:start");
 
 		// Send the final response as one synthesis request. Sentence-by-sentence
 		// API calls caused audible gaps between sentences and made Fish output
@@ -813,6 +1241,8 @@ class TtsQueue {
 					notifyFailure(this.ctx, `TTS notification failed: ${formatError(error)}`);
 				}
 			}
+			// All items done — signal emote to stop talking.
+			this.events?.emit("tts:end");
 		} finally {
 			this.running = false;
 			if (this.queue.length > 0) void this.drain();
@@ -826,6 +1256,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	let currentAgentIsInteractive = false;
 	let nextAgentIsInteractive = false;
 	const tts = new TtsQueue(() => settings);
+	tts.setEvents(pi.events);
 
 	pi.registerFlag("notification", {
 		description: "Notification mode: off, beep, tts, or both",
@@ -846,6 +1277,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	function setMode(nextMode: NotificationMode, ctx?: ExtensionContext): void {
 		settings.mode = nextMode;
 		persistSettings(ctx);
+		pi.events.emit("tts:mode", { mode: nextMode });
 	}
 
 	pi.on("input", async (event) => {
@@ -856,6 +1288,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		currentAgentIsInteractive = nextAgentIsInteractive && ctx.hasUI;
 		nextAgentIsInteractive = false;
 		tts.setContext(ctx);
+		tts.setEvents(pi.events);
 	});
 
 	pi.on("message_end", async (event, ctx) => {
@@ -902,6 +1335,8 @@ export default function notificationExtension(pi: ExtensionAPI) {
 			}
 		}
 		updateStatus(ctx, mode);
+		// Broadcast TTS mode so emote can adapt.
+		pi.events.emit("tts:mode", { mode });
 	});
 
 	// ── Menu tree factory ──────────────────────────────────────
@@ -964,6 +1399,26 @@ export default function notificationExtension(pi: ExtensionAPI) {
 						children: () => [
 							{ type: "action", id: "engine-set:windows-native", label: "Select windows-native" },
 						],
+					},
+					{
+						type: "submenu",
+						id: "engine:vllm",
+						label: currentEngine === "vllm-omni" ? "▸ vllm-omni (current)" : "vllm-omni",
+						children: () => {
+							const vllmAudio = settings.vllmOmni?.audioPath;
+							const vllmRefTextPath = settings.vllmOmni?.refTextPath;
+							const vllmCached = settings.vllmOmni?.voiceCached;
+							const vllmAudioLabel = vllmAudio ? vllmAudio.split(/[/\\]/).pop() : "not set";
+							const vllmRefLabel = vllmRefTextPath ? vllmRefTextPath.split(/[/\\]/).pop() : "not set";
+							return [
+								{ type: "action", id: "engine-set:vllm-omni", label: "Select vllm-omni" },
+								{ type: "action", id: "vllm:browse-audio", label: `Browse audio (.wav)  (${vllmAudioLabel})` },
+								{ type: "action", id: "vllm:browse-reftext", label: `Browse transcript (.txt)  (${vllmRefLabel})` },
+								{ type: "action", id: "vllm:test-connection", label: "Test server connection" },
+								{ type: "action", id: "vllm:upload-voice", label: vllmCached ? "Re-upload voice to server" : "Upload & cache voice on server" },
+								{ type: "action", id: "vllm:test-tts", label: "Test TTS playback" },
+							];
+						},
 					},
 				],
 			},
@@ -1076,6 +1531,114 @@ export default function notificationExtension(pi: ExtensionAPI) {
 			return;
 		}
 
+		// vLLM-Omni config
+		if (id === "vllm:browse-audio") {
+			if (process.platform !== "win32") {
+				if (ctx) ctx.ui.notify("File browser requires Windows. Paste the path manually.", "warning");
+				return;
+			}
+			const result = await new Promise<string | null>((resolve) => {
+				execFile("powershell.exe", [
+					"-NoProfile", "-NonInteractive", "-Command",
+					`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null;
+$dlg = New-Object System.Windows.Forms.OpenFileDialog;
+$dlg.Filter = 'Wave files (*.wav)|*.wav|All files (*.*)|*.*';
+$dlg.Title = 'Select reference audio file';
+$result = $dlg.ShowDialog();
+if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
+				], { windowsHide: true }, (error, stdout, stderr) => {
+					if (error) {
+						if (ctx) ctx.ui.notify(`File browser error: ${stderr.trim() || error.message}`, "error");
+						resolve(null);
+					} else {
+						resolve(stdout.trim() || null);
+					}
+				});
+			});
+			if (result) {
+				settings.vllmOmni = { ...settings.vllmOmni, audioPath: result };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify(`Audio reference set: ${result.split(/[/\\]/).pop()}`, "info");
+			}
+			return;
+		}
+		if (id === "vllm:browse-reftext") {
+			if (process.platform !== "win32") {
+				if (ctx) ctx.ui.notify("File browser requires Windows. Paste the path manually.", "warning");
+				return;
+			}
+			const result = await new Promise<string | null>((resolve) => {
+				execFile("powershell.exe", [
+					"-NoProfile", "-NonInteractive", "-Command",
+					`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null;
+$dlg = New-Object System.Windows.Forms.OpenFileDialog;
+$dlg.Filter = 'Text files (*.txt)|*.txt|All files (*.*)|*.*';
+$dlg.Title = 'Select transcript file';
+$result = $dlg.ShowDialog();
+if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
+				], { windowsHide: true }, (error, stdout, stderr) => {
+					if (error) {
+						if (ctx) ctx.ui.notify(`File browser error: ${stderr.trim() || error.message}`, "error");
+						resolve(null);
+					} else {
+						resolve(stdout.trim() || null);
+					}
+				});
+			});
+			if (result) {
+				settings.vllmOmni = { ...settings.vllmOmni, refTextPath: result };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify(`Transcript set: ${result.split(/[/\\]/).pop()}`, "info");
+			}
+			return;
+		}
+		if (id === "vllm:test-connection") {
+			const baseUrl = getVllmOmniBaseUrl(settings);
+			try {
+				if (ctx) ctx.ui.notify(`Pinging ${baseUrl}/health...`, "info");
+				const res = await fetch(joinUrl(baseUrl, "health"), { signal: AbortSignal.timeout(5000) });
+				if (res.ok) {
+					if (ctx) ctx.ui.notify(`Server is reachable at ${baseUrl}`, "info");
+				} else {
+					if (ctx) ctx.ui.notify(`Server responded with status ${res.status}`, "warning");
+				}
+			} catch (error) {
+				notifyFailure(ctx, `Cannot reach server at ${baseUrl}: ${formatError(error)}`);
+			}
+			return;
+		}
+		if (id === "vllm:upload-voice") {
+			if (!settings.vllmOmni?.audioPath || !existsSync(settings.vllmOmni.audioPath)) {
+				if (ctx) ctx.ui.notify("Browse and select an audio file first.", "warning");
+				return;
+			}
+			try {
+				if (ctx) ctx.ui.notify("Uploading voice to server…", "info");
+				const voice = await uploadVllmOmniVoice(settings);
+				settings.vllmOmni = { ...settings.vllmOmni, voiceCached: true };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify(`Voice "${voice}" uploaded and cached on server.`, "info");
+			} catch (error) {
+				notifyFailure(ctx, `Upload failed: ${formatError(error)}`);
+			}
+			return;
+		}
+		if (id === "vllm:test-tts") {
+			if (!settings.vllmOmni?.audioPath || !existsSync(settings.vllmOmni.audioPath)) {
+				if (ctx) ctx.ui.notify("Browse and select an audio file, then upload voice first.", "warning");
+				return;
+			}
+			const text = "This is a test of the vLLM Omni TTS engine.";
+			try {
+				if (ctx) ctx.ui.notify("Starting vLLM-Omni TTS test…", "info");
+				await streamVllmOmniPcmToFfplay(text, settings);
+				if (ctx) ctx.ui.notify("TTS test completed.", "info");
+			} catch (error) {
+				notifyFailure(ctx, `TTS test failed: ${formatError(error)}`);
+			}
+			return;
+		}
+
 		// Debug
 		if (id === "debug:test-beep") {
 			try {
@@ -1097,6 +1660,11 @@ export default function notificationExtension(pi: ExtensionAPI) {
 $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;
 $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 				} else if (settings.ttsEngine === "openai-compatible") {
+					diagnostic = await synthesizeDiagnosticWav(text, settings);
+					if (ctx) ctx.ui.notify(`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`, "info");
+					await playTtsWav(diagnostic.path);
+				} else if (settings.ttsEngine === "vllm-omni") {
+					if (ctx) ctx.ui.notify("Connecting to vLLM-Omni WebSocket TTS...", "info");
 					diagnostic = await synthesizeDiagnosticWav(text, settings);
 					if (ctx) ctx.ui.notify(`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`, "info");
 					await playTtsWav(diagnostic.path);

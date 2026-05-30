@@ -74,6 +74,7 @@ const DEFAULTS: Config = {
     { match: "vscode", render: "kitty" },
     { match: "wezterm", render: "iterm2" },
     { match: "ghostty", render: "kitty" },
+    { match: "unknown", render: process.platform === "win32" ? "sixel" : "ascii" },
   ],
 };
 

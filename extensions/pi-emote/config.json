@@ -20,7 +20,7 @@
     { "match": "tmux", "render": "auto" },
     { "match": "screen", "render": "ascii" },
     { "match": "windows-terminal", "render": "sixel" },
-    { "match": "vscode", "render": "kitty" },
+    { "match": "vscode", "render": "ascii" },
     { "match": "wezterm", "render": "iterm2" },
     { "match": "ghostty", "render": "kitty" }
   ]

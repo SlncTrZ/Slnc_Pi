@@ -81,15 +81,7 @@ $env:WT_SESSION
 # empty
 ```
 
-pi-emote can try VS Code's Kitty graphics path if image support is enabled:
-
-```json
-"terminal.integrated.enableImages": true,
-"terminal.integrated.gpuAcceleration": "on",
-"terminal.integrated.windowsUseConptyDll": true
-```
-
-However, this path is currently experimental. VS Code may render a grey/checkerboard image-placement artifact around the sprite. The external Windows Terminal + Chafa path is the stable Windows option.
+**Image rendering is not supported in the VS Code integrated terminal.** pi-emote maps `vscode` to the ASCII renderer. See the [VS Code Integrated Terminal (ASCII)](#vs-code-integrated-terminal-ascii) section below for details. For full image rendering on Windows, use the external Windows Terminal + Chafa path above.
 
 ## States
 
@@ -98,12 +90,11 @@ However, this path is currently experimental. VS Code may render a grey/checkerb
 | hi | Session start |
 | idle | Nothing happening (blinks occasionally) |
 | think | Reasoning tokens streaming |
-| talk | Text response streaming |
+| talk | Text response streaming (TTS off) or TTS audio playback (TTS on) |
 | read | `read` tool / reading tool output |
 | write | `write` or `edit` tool |
 | tool | Any other tool |
-| success | Successful tool execution |
-| failure | Failed tool execution |
+| failure | `bash` tool execution error |
 | compact | Context compaction |
 
 ## Config
@@ -162,27 +153,27 @@ If Chafa isn't found in your PATH, you can set its location via environment vari
 $env:PI_EMOTE_CHAFA_PATH="C:\path\to\Chafa.exe"
 ```
 
-### VS Code Integrated Terminal (Kitty Graphics, Experimental)
+### VS Code Integrated Terminal (ASCII)
 
-As of VS Code v1.110, the integrated terminal supports the Kitty graphics protocol natively on Windows via ConPTY v2. pi-emote can target this path so the sprite stays docked inside VS Code instead of requiring an external Windows Terminal window.
+VS Code's integrated terminal uses xterm.js with the `xterm-addon-image` addon. The addon's image protocol support is incomplete for pi-emote's animation pattern:
 
-Because the core `pi-tui` library historically marks VS Code as `images: null`, pi-emote explicitly overrides this and maps VS Code to the `kitty` renderer:
+- **Kitty graphics protocol** — alpha-stage support in xterm-addon-image. Lacks transparency composition, so the sprite area renders with a grey/checkerboard placement rectangle.
+- **Sixel** — beta support, but every emitted frame is treated as a new image by the addon's storage. As the widget animates and the conversation scrolls, evicted frames leave grey/checkerboard placeholders behind and ghost sprites pile up the screen.
+- **iTerm2 IIP** — causes cursor/layout drift inside the pi TUI.
 
-```json
-{ "match": "vscode", "render": "kitty" }
-```
-
-To enable VS Code's image renderer, add these settings to your VS Code `settings.json`:
+All three image protocols were tested. None produce a clean result. pi-emote therefore maps VS Code to the ASCII renderer by default:
 
 ```json
-"terminal.integrated.enableImages": true,
-"terminal.integrated.gpuAcceleration": "on",
-"terminal.integrated.windowsUseConptyDll": true
+{ "match": "vscode", "render": "ascii" }
 ```
 
-Then reload VS Code or close and reopen the integrated terminal before launching pi.
+**For full image rendering on Windows, run pi in Windows Terminal** instead — see the Windows Terminal section above. The Sixel/Chafa path there is stable.
 
-**Known issue:** VS Code's current Kitty image path is usable but visually bugged for pi-emote. The sprite stays spatially stable, but VS Code may render a grey/checkerboard image-placement area around the avatar that can overlap nearby terminal content. The iTerm inline image protocol was also tried for VS Code, but it caused cursor/layout drift and is not recommended. For the cleanest Windows experience, use Windows Terminal with the Sixel/Chafa path above.
+**Workaround if you want both VS Code and the pixel sprite:** Windows Terminal can't be embedded inside VS Code's terminal pane — `wt.exe` is itself a terminal emulator (GUI host), not a shell, so it can't be selected as a VS Code terminal profile the way `bash.exe` or `pwsh.exe` can. The practical option is to run Windows Terminal as a separate window snapped alongside VS Code (Win+Left / Win+Right). You lose true docking but get the working sprite plus your editor side by side.
+
+If you want to opt into a (known-broken) image renderer in VS Code anyway — for example to test future xterm-addon-image fixes — override the renderer in your user or project config via [Manual Terminal Overrides](#manual-terminal-overrides). Known-broken values for VS Code: `kitty`, `sixel`, `iterm2`.
+
+> _Note: the analysis above (xterm-addon-image limitations, why Windows Terminal can't be embedded as a VS Code profile, and the recommended ASCII fallback) was written by Claude during a debugging session. Treat it as a starting point — if VS Code or xterm-addon-image ships fixes in a later release, this section may need re-testing._
 
 ### Manual Terminal Overrides
 
@@ -191,7 +182,7 @@ You can force a specific renderer for any terminal in your user or project confi
 ```json
 {
   "terminals": [
-    { "match": "vscode", "render": "kitty" },
+    { "match": "vscode", "render": "ascii" },
     { "match": "windows-terminal", "render": "sixel" },
     { "match": "ghostty", "render": "kitty" }
   ]
@@ -287,7 +278,7 @@ emotes/my-avatar/
 ├── read/*.png
 ├── write/*.png
 ├── tool/*.png
-└── ...          # hi, success, failure, compact
+└── ...          # hi, failure, compact (success is reserved/unused)
 ```
 
 Not all states are required. Missing ones just won't animate.

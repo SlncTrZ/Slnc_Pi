@@ -60,6 +60,7 @@ export class KittyRenderer extends BaseImageRenderer {
     if (yOffset > 0) {
       params.Y = yOffset;
     }
+
     return buildKittySequence(base64, params);
   }
 
