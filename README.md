@@ -14,11 +14,65 @@ pi install ./pi-extensions
 pi remove ./pi-extensions
 ```
 
+## Usage
+
+### Notification Extension
+Enable audio notifications for assistant responses.
+
+**Setup:**
+Run `/notification` to open the interactive configuration menu. Navigate with ↑↓, press Enter to select or drill into submenus, and Escape to go back.
+
+**Menu structure:**
+- **Mode** — Choose `off`, `beep`, `tts`, or `both`
+- **Engine** — Select and configure a TTS engine:
+  - `fish` — High-quality streaming TTS via Fish Audio WebSocket (requires API key)
+  - `openai-compatible` — OpenAI-compatible `/v1/audio/speech` providers (API key optional, provider-dependent)
+  - `windows-native` — Local Windows SAPI (no key required, Windows only)
+  - `vllm-omni` — Local vLLM-Omni server (S2-Pro) via WebSocket streaming PCM audio
+- **Debug** — Test beep playback and TTS synthesis
+- **Status** — Show current configuration summary
+
+**vllm-omni setup:**
+Before using the `vllm-omni` engine you need a running vLLM-Omni server (e.g. S2-Pro) accessible at the configured base URL (default `http://localhost:8091`). Once the server is running:
+
+1. Run `/notification` → Engine → `vllm-omni`
+2. **Browse audio (.wav)** — pick your voice reference `.wav` file
+3. **Browse transcript (.txt)** — pick the matching transcript (optional but recommended)
+4. **Test server connection** — verify the server is reachable
+5. **Upload & cache voice** — upload and cache the voice on the server
+6. **Test TTS playback** — play a short test sentence to confirm everything works
+
+Voice name is auto-derived from the audio filename. The transcript is read from the selected `.txt` file — no manual typing needed.
+
+**Startup flag:**
+Override the notification mode at launch:
+```bash
+pi --notification beep   # or tts, both, off
+```
+
+See `docs/CONFIG.md` for environment variables, defaults, and settings file details.
+
+### Emote Extension
+Change the active pi-emote face set from inside pi:
+
+```text
+/emote list
+/emote set aza_choi_nobg
+```
+
+The `/emote set` argument autocompletes from the emote sets available in `extensions/pi-emote/emotes/` plus any user or project pi-emote emote folders. The selected default is saved to `~/.pi/agent/extensions/pi-emote/config.json` and applied immediately in the current session.
+
+**TTS Sync:** When the notification extension is set to `tts` or `both` mode, the emote's mouth animation syncs to TTS audio playback. During token streaming the emote stays in its context-appropriate state (think, tool, etc.) and only enters a talking animation when TTS audio begins. It returns to idle when playback finishes.
+
 ## Structure
 
-- `extensions/` — TypeScript extensions (auto-discovered)
+- `extensions/` — Extension package directories. Each subdirectory can include its own `package.json` with a `pi.extensions` entry.
+  - `extensions/notification/` — Local notification extension package.
+  - `extensions/pi-emote/` — Vendored third-party pi-emote extension package.
 - `skills/` — Skill directories with `SKILL.md`
 - `prompts/` — Prompt template Markdown files
+
+The root `package.json` points pi at `./extensions`; pi discovers one level of extension subdirectories and honors each subpackage's `pi.extensions` manifest. This keeps `pi install .` as the single local install command.
 
 ## Multi-Agent Checkpoint Workflow
 

@@ -1,0 +1,37 @@
+{
+  "name": "pi-emote",
+  "version": "0.2.7",
+  "description": "Animated pixel-art emote widget for pi TUI",
+  "author": "CGx <31814150+cgxeiji@users.noreply.github.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cgxeiji/pi-emote.git"
+  },
+  "homepage": "https://github.com/cgxeiji/pi-emote#readme",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pixel-art",
+    "emote",
+    "avatar",
+    "tui"
+  ],
+  "files": [
+    "src",
+    "emotes",
+    "!emotes/_test",
+    "!emotes/_unused",
+    "config.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": ["./src/index.ts"],
+    "image": "https://raw.githubusercontent.com/cgxeiji/pi-emote/main/pi-emote-demo.gif"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  }
+}
