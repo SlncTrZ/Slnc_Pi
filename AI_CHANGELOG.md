@@ -1,6 +1,15 @@
 # AI Changelog
 
 ## 2026-05-31
+- **System Prompt Extension**:
+  - Added `extensions/system-prompt/` as a standalone Pi extension with `/system-prompt` tree menu.
+  - Added persisted mode/profile settings in `~/.pi/agent/system-prompt.json`.
+  - Added append-only `validation-prompt` profile loaded from `extensions/system-prompt/prompts/validation-prompt.md` at startup/reload.
+  - The validation profile instructs models to inspect source/docs before assuming APIs, validate implemented changes with command output or test results, use `local/` for temporary validation scripts, and report unverified work clearly.
+  - Added extension README and updated the root README extension table/structure.
+- **Qwen Issues Log**:
+  - Created the global `C:\Users\jarod\QWEN_ISSUES.md` first-person issue log for recurring Qwen/local-agent annoyances.
+  - Moved the fake `YOUR_USERNAME` GitHub clone URL entry there and removed the repo-local `docs/DUMB_QWEN_THINGS.md` copy.
 - **Author Notes and Code Standards Updates**:
   - Added repository identity to `docs/AUTHOR_NOTES.md`: this is Jarod's personal pi extensions repo used with his pi setup.
   - Added parent-package/vendored-extension documentation rules to `docs/CODE_STANDARDS.md`, including accurate `JarodMica/jarods-pi-extensions` install context and avoiding placeholder/upstream install instructions as the primary path.

@@ -35,6 +35,7 @@ pi remove .
 | **[notification](extensions/notification/)** | Audio notifications — beep, TTS, or both (4 engine backends) | [README](extensions/notification/README.md) |
 | **[pi-emote](extensions/pi-emote/)** | Animated pixel-art avatar that reacts to agent activity | [README](extensions/pi-emote/README.md) |
 | **[pi-mcp-adapter](extensions/pi-mcp-adapter/)** | Connect to MCP servers via a single ~200-token proxy tool | [README](extensions/pi-mcp-adapter/README.md) |
+| **[system-prompt](extensions/system-prompt/)** | Select append-only system prompt profiles, including trust-but-verify validation behavior | [README](extensions/system-prompt/README.md) |
 
 ## Repository Structure
 
@@ -43,7 +44,8 @@ jarods-pi-extensions/
 ├── extensions/
 │   ├── notification/     — Notification extension (beep / TTS)
 │   ├── pi-emote/         — Pixel-art emote widget (vendored from cgxeiji/pi-emote)
-│   └── pi-mcp-adapter/   — MCP server adapter (vendored from nicobailon/pi-mcp-adapter)
+│   ├── pi-mcp-adapter/   — MCP server adapter (vendored from nicobailon/pi-mcp-adapter)
+│   └── system-prompt/    — Append-only selectable system prompt profiles
 ├── skills/               — Skill directories (placeholder, add SKILL.md files)
 ├── prompts/              — Prompt templates (placeholder, add .md files)
 ├── docs/
