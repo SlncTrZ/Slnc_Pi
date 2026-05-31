@@ -53,14 +53,30 @@ pi --notification beep   # or tts, both, off
 See `docs/CONFIG.md` for environment variables, defaults, and settings file details.
 
 ### Emote Extension
-Change the active pi-emote face set from inside pi:
+Change the active pi-emote face set from inside pi.
+
+**Interactive menu:** Run `/emote` (no arguments) to open the drill-down configuration menu. Navigate with ↑↓, press Enter to select or drill into submenus, and Escape to go back or close.
+
+**Menu structure:**
+- **Emote Set** — Select from available emote sets (current set marked with ▸)
+- **Display** — Configure display options:
+  - **Image Size** — Set sprite grid width (2–120 columns)
+  - **Always Show** — Toggle persistent visibility on narrow terminals
+- **Status** — Show current configuration summary
+
+**Subcommands (backward compatible):** All settings save to `~/.pi/agent/extensions/pi-emote/config.json` and apply immediately.
 
 ```text
 /emote list
 /emote set aza_choi_nobg
+/emote image-size 32
+/emote always-show on
 ```
 
-The `/emote set` argument autocompletes from the emote sets available in `extensions/pi-emote/emotes/` plus any user or project pi-emote emote folders. The selected default is saved to `~/.pi/agent/extensions/pi-emote/config.json` and applied immediately in the current session.
+- `/emote list` — show current settings and available emote sets
+- `/emote set <name>` — change the emote set (autocompletes)
+- `/emote image-size <cols>` — change image sprite size (2–120 columns, applies immediately)
+- `/emote always-show on|off` — keep the sprite visible even on narrow terminals
 
 **TTS Sync:** When the notification extension is set to `tts` or `both` mode, the emote's mouth animation syncs to TTS audio playback. During token streaming the emote stays in its context-appropriate state (think, tool, etc.) and only enters a talking animation when TTS audio begins. It returns to idle when playback finishes.
 

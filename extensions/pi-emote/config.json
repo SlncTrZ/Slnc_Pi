@@ -3,7 +3,7 @@
   "debug": false,
   "size": 8,
   "readingSpeed": 4,
-  "hideBelow": 80,
+  "hideBelow": 20,
   "holdDuration": {
     "hi": 2000,
     "success": 1200,

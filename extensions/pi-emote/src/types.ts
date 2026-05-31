@@ -4,6 +4,10 @@ export interface Config {
   enabled: boolean;
   debug: boolean;
   size: number;
+  /** Grid size for image protocols (Kitty, Sixel, iTerm2). Defaults to `size` when not set. */
+  imageSize?: number;
+  /** Never hide the sprite, even on narrow terminals. Overrides `hideBelow`. */
+  alwaysShow?: boolean;
   readingSpeed: number;
   hideBelow: number;
   holdDuration: { hi: number; success: number; failure: number };

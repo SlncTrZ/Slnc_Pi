@@ -109,11 +109,15 @@ Only include what you want to change:
 ```json
 {
   "size": 12,
+  "imageSize": 32,
   "emotes": [
     { "model": "*claude*", "emote-set": "my-avatar" }
   ]
 }
 ```
+
+- `size` — grid width for ASCII/text fallback emotes (characters wide)
+- `imageSize` — grid width for image protocols (Kitty, Sixel, iTerm2). Defaults to `size` when not set. Use a larger value to make image emotes bigger without affecting ASCII.
 
 See `config.json` in the extension root for all defaults.
 
@@ -124,9 +128,16 @@ Use `/emote` inside pi to inspect or change the default face set:
 ```text
 /emote list
 /emote set aza_choi_nobg
+/emote image-size 32
+/emote always-show on
 ```
 
-`/emote set` autocompletes available emote set names from extension, user, and project emote folders. It saves the selected default to `~/.pi/agent/extensions/pi-emote/config.json` and applies it immediately in the current session.
+- `/emote list` — show current settings and available emote sets
+- `/emote set <name>` — change the emote set (autocompletes)
+- `/emote image-size <cols>` — change image sprite size (2–120 columns, applies immediately)
+- `/emote always-show on|off` — keep the sprite visible even on narrow terminals (overrides `hideBelow`)
+
+All settings save to `~/.pi/agent/extensions/pi-emote/config.json` and apply immediately.
 
 ## Supported Terminals
 

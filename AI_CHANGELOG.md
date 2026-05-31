@@ -1,6 +1,24 @@
 # AI Changelog
 
 ## 2026-05-28
+- **Larger Image Emotes**:
+  - Added `imageSize` config field to pi-emote for independent image/text grid sizing.
+  - Image protocols (Kitty, Sixel, iTerm2) use `imageSize` for the sprite grid width.
+  - ASCII/text fallback stays at `size` — not affected by `imageSize`.
+  - When `imageSize` is not set, defaults to `size` (backward compatible).
+  - Updated `extensions/pi-emote/README.md` Config section with imageSize example.
+  - Added `/emote image-size <cols>` command to configure imageSize interactively (2–120).
+  - Added `/emote list` now shows current imageSize alongside emote set.
+  - Added `saveUserImageSize()` helper in config.ts.
+  - Added `alwaysShow` config field to pi-emote — when true, sprite never hides even on narrow terminals.
+  - Added `/emote always-show on|off` command to toggle persistently visible sprite.
+  - Lowered `hideBelow` default in extension config.json from 80 to 20.
+- **Documentation Update**:
+  - Updated root `README.md` emote section to list all four commands (added `/emote always-show on|off`).
+- **Documentation Verification (Full Audit)**:
+  - Verified all docs against current code: README.md, extensions/pi-emote/README.md, docs/CONFIG.md, extensions/pi-emote/config.json
+  - **Inconsistencies found:** None — all docs match current implementation
+  - Verified: menu structure, engine list, vllm-omni setup, emote commands, imageSize config, states table, config fields, env vars, defaults, TTS sync table
 - **Documentation Verification**:
   - **Inconsistencies found:**
     - `extensions/pi-emote/README.md` States table described `failure` as triggered by "Failed tool execution" — code only triggers failure for `bash` tool errors specifically (`tool_execution_end` when `event.toolName === "bash" && event.isError`)

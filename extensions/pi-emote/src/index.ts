@@ -7,8 +7,9 @@ import { existsSync, readdirSync } from "node:fs";
 import type { EmoteState, ResolvedRenderer } from "./types.js";
 import type { Renderer } from "./renderer.js";
 import { log, setDebug } from "./log.js";
-import { loadLayeredConfig, saveUserDefaultEmoteSet } from "./config.js";
+import { loadLayeredConfig, saveUserDefaultEmoteSet, saveUserImageSize, saveUserAlwaysShow } from "./config.js";
 import { resolveEmoteSet, findEmoteSetDir, loadEmotesConfig, listEmoteSets } from "./emotes.js";
+import { openMenu, type MenuItem } from "./menu.js";
 import { KittyRenderer } from "./render_kitty.js";
 import { TmuxKittyRenderer } from "./render_tmux_kitty.js";
 import { TmuxKittyUnicodeRenderer } from "./render_tmux_kitty_unicode.js";
@@ -43,31 +44,39 @@ function toolNameToState(toolName: string): EmoteState {
   }
 }
 
-function createRendererFromResolved(resolved: ResolvedRenderer, size: number): Renderer {
+/** Resolve imageSize from config — defaults to `size` when not set. */
+import type { Config } from "./types.js";
+function resolveImageSize(config: Config): number {
+  const v = config.imageSize;
+  if (typeof v === "number" && v > 0) return v;
+  return config.size;
+}
+
+function createRendererFromResolved(resolved: ResolvedRenderer, imageSize: number): Renderer {
   const { protocol, multiplexer } = resolved;
   if (protocol === "kitty-unicode") {
-    log(`createRenderer: using TmuxKittyUnicodeRenderer`);
-    return new TmuxKittyUnicodeRenderer(size);
+    log(`createRenderer: using TmuxKittyUnicodeRenderer (${imageSize} cols)`);
+    return new TmuxKittyUnicodeRenderer(imageSize);
   }
   if (protocol === "kitty") {
     if (multiplexer === "tmux") {
-      log(`createRenderer: using TmuxKittyRenderer`);
-      return new TmuxKittyRenderer(size);
+      log(`createRenderer: using TmuxKittyRenderer (${imageSize} cols)`);
+      return new TmuxKittyRenderer(imageSize);
     }
-    log(`createRenderer: using KittyRenderer`);
-    return new KittyRenderer(size);
+    log(`createRenderer: using KittyRenderer (${imageSize} cols)`);
+    return new KittyRenderer(imageSize);
   }
   if (protocol === "iterm2") {
     if (multiplexer === "tmux") {
-      log(`createRenderer: using TmuxITermRenderer`);
-      return new TmuxITermRenderer(size);
+      log(`createRenderer: using TmuxITermRenderer (${imageSize} cols)`);
+      return new TmuxITermRenderer(imageSize);
     }
-    log(`createRenderer: using ITermRenderer`);
-    return new ITermRenderer(size);
+    log(`createRenderer: using ITermRenderer (${imageSize} cols)`);
+    return new ITermRenderer(imageSize);
   }
   if (protocol === "sixel") {
-    log(`createRenderer: using SixelRenderer`);
-    return new SixelRenderer(size);
+    log(`createRenderer: using SixelRenderer (${imageSize} cols)`);
+    return new SixelRenderer(imageSize);
   }
   log(`createRenderer: using AsciiRenderer`);
   return new AsciiRenderer();
@@ -91,7 +100,7 @@ export default function (pi: ExtensionAPI) {
   let ctxRef: any = null;
   let widgetActive = false;
   let lastResolved = resolveRenderer(config.terminals, userConfiguredTerminals);
-  let renderer = createRendererFromResolved(lastResolved, config.size);
+  let renderer = createRendererFromResolved(lastResolved, resolveImageSize(config));
 
   const animator = new Animator(config, renderer);
 
@@ -127,7 +136,7 @@ export default function (pi: ExtensionAPI) {
       }
     } else {
       // Ensure we're using the capability-based renderer
-      const detected = createRendererFromResolved(lastResolved, config.size);
+      const detected = createRendererFromResolved(lastResolved, resolveImageSize(config));
       if (renderer.constructor !== detected.constructor) {
         renderer = detected;
         animator.setRenderer(renderer);
@@ -179,26 +188,231 @@ export default function (pi: ExtensionAPI) {
     return [
       { value: "list", label: "list" },
       { value: "set ", label: "set <emote-set>" },
+      { value: "image-size ", label: "image-size <cols>" },
+      { value: "always-show on", label: "always-show on" },
+      { value: "always-show off", label: "always-show off" },
     ].filter((item) => item.value.startsWith(trimmed)) as AutocompleteItem[];
   }
 
+  // ── Menu tree factory ─────────────────────────────────────
+
+  function buildEmoteMenuTree(): MenuItem[] {
+    const sets = listEmoteSets(extDir, cwd);
+    const imgSize = resolveImageSize(config);
+    const alwaysShow = config.alwaysShow ?? false;
+
+    return [
+      {
+        type: "submenu",
+        id: "emote-set",
+        label: "Emote Set",
+        children: () =>
+          sets.map((setName) => ({
+            type: "action" as const,
+            id: `set:${setName}`,
+            label: setName === currentEmoteSet ? `▸ ${setName} (current)` : setName,
+          })),
+      },
+      {
+        type: "submenu",
+        id: "display",
+        label: "Display",
+        children: () => [
+          {
+            type: "input" as const,
+            id: "image-size",
+            label: `Image Size  (${imgSize} cols)`,
+            prompt: `Image size (2–120 columns, current: ${imgSize}):`,
+            currentValue: String(imgSize),
+          },
+          {
+            type: "action" as const,
+            id: "always-show",
+            label: alwaysShow ? "Always Show  (on)" : "Always Show  (off)",
+          },
+        ],
+      },
+      { type: "action", id: "status", label: "Status" },
+    ];
+  }
+
+  // ── Menu action handler ────────────────────────────────────
+
+  async function handleEmoteMenuAction(id: string, value?: string): Promise<void> {
+    const ctx = menuCtx;
+    if (!ctx) return;
+
+    // Emote set selection
+    if (id.startsWith("set:")) {
+      const setName = id.slice(4);
+      const sets = listEmoteSets(extDir, cwd);
+      if (!sets.includes(setName)) {
+        ctx.ui.notify(`[pi-emote] Unknown emote set "${setName}".`, "warning");
+        return;
+      }
+      try {
+        saveUserDefaultEmoteSet(setName);
+        ({ config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd));
+        setDebug(config.debug);
+        animator.updateConfig(config);
+        loadEmoteSet(setName);
+        refreshCurrentFrame();
+        ctx.ui.notify(`[pi-emote] Emote set changed to "${setName}". Saved to user config.`, "info");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`[pi-emote] Failed to set emote set: ${message}`, "error");
+      }
+      return;
+    }
+
+    // Image size
+    if (id === "image-size") {
+      if (!value || value === String(resolveImageSize(config))) {
+        return;
+      }
+      const n = parseInt(value, 10);
+      if (isNaN(n) || n < 2 || n > 120) {
+        ctx.ui.notify(`[pi-emote] imageSize must be a number between 2 and 120.`, "warning");
+        return;
+      }
+      try {
+        saveUserImageSize(n);
+        ({ config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd));
+        setDebug(config.debug);
+        animator.updateConfig(config);
+        const newRenderer = createRendererFromResolved(lastResolved, resolveImageSize(config));
+        renderer.dispose();
+        renderer = newRenderer;
+        animator.setRenderer(renderer);
+        renderer.loadFrames(findEmoteSetDir(currentEmoteSet, extDir, cwd), extDir);
+        refreshCurrentFrame();
+        ctx.ui.notify(`[pi-emote] imageSize set to ${resolveImageSize(config)}. Saved to user config.`, "info");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`[pi-emote] Failed to set imageSize: ${message}`, "error");
+      }
+      return;
+    }
+
+    // Always show toggle
+    if (id === "always-show") {
+      try {
+        const nextValue = !(config.alwaysShow ?? false);
+        saveUserAlwaysShow(nextValue);
+        ({ config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd));
+        animator.updateConfig(config);
+        ctx.ui.notify(
+          nextValue
+            ? `[pi-emote] alwaysShow enabled — sprite never hides. Saved to user config.`
+            : `[pi-emote] alwaysShow disabled — sprite hides below ${config.hideBelow} columns. Saved to user config.`,
+          "info",
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`[pi-emote] Failed to set alwaysShow: ${message}`, "error");
+      }
+      return;
+    }
+
+    // Status
+    if (id === "status") {
+      const sets = listEmoteSets(extDir, cwd);
+      const imgSize = resolveImageSize(config);
+      const alwaysShow = config.alwaysShow ?? false;
+      ctx.ui.notify(
+        `[pi-emote]\nEmote set: ${currentEmoteSet}\nImage size: ${imgSize} cols\nGrid size: ${config.size}\nAlways show: ${alwaysShow ? "on" : "off"}\nAvailable sets: ${sets.join(", ")}`,
+        "info",
+      );
+      return;
+    }
+  }
+
+  // ── Command registration ───────────────────────────────────
+
+  let menuCtx: any = null;
+
   pi.registerCommand("emote", {
-    description: "List or set the pi-emote face set",
+    description: "Configure pi-emote (interactive menu) or use subcommands: set, image-size, always-show, list",
     getArgumentCompletions: autocompleteEmoteCommand,
     handler: async (args, ctx) => {
+      // No arguments — open the interactive menu
+      if (!args || !args.trim()) {
+        menuCtx = ctx;
+        await openMenu(ctx, "Emote", buildEmoteMenuTree, handleEmoteMenuAction);
+        menuCtx = null;
+        return;
+      }
+
+      // Subcommand path (backward compatible)
       const sets = listEmoteSets(extDir, cwd);
       const [subcommand, setName, ...extra] = args.trim().split(/\s+/).filter(Boolean);
 
-      if (!subcommand || subcommand === "list") {
+      if (subcommand === "list") {
+        const imgSize = resolveImageSize(config);
         ctx.ui.notify(
-          `[pi-emote] Current emote set: ${currentEmoteSet}\nAvailable emote sets: ${sets.join(", ")}`,
+          `[pi-emote] Emote set: ${currentEmoteSet}  ·  imageSize: ${imgSize}  ·  size: ${config.size}\nAvailable emote sets: ${sets.join(", ")}`,
           "info",
         );
         return;
       }
 
+      if (subcommand === "image-size") {
+        if (!setName || extra.length > 0) {
+          ctx.ui.notify(`[pi-emote] Usage: /emote image-size <cols> (e.g. /emote image-size 16)`, "warning");
+          return;
+        }
+        const n = parseInt(setName, 10);
+        if (isNaN(n) || n < 2 || n > 120) {
+          ctx.ui.notify(`[pi-emote] imageSize must be a number between 2 and 120.`, "warning");
+          return;
+        }
+        try {
+          saveUserImageSize(n);
+          ({ config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd));
+          setDebug(config.debug);
+          animator.updateConfig(config);
+          const newRenderer = createRendererFromResolved(lastResolved, resolveImageSize(config));
+          renderer.dispose();
+          renderer = newRenderer;
+          animator.setRenderer(renderer);
+          renderer.loadFrames(findEmoteSetDir(currentEmoteSet, extDir, cwd), extDir);
+          refreshCurrentFrame();
+          ctx.ui.notify(`[pi-emote] imageSize set to ${resolveImageSize(config)}. Saved to user config.`, "info");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          ctx.ui.notify(`[pi-emote] Failed to set imageSize: ${message}`, "error");
+        }
+        return;
+      }
+
+      if (subcommand === "always-show") {
+        if (!setName || extra.length > 0) {
+          ctx.ui.notify(`[pi-emote] Usage: /emote always-show on|off`, "warning");
+          return;
+        }
+        try {
+          if (setName === "on") {
+            saveUserAlwaysShow(true);
+            ({ config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd));
+            animator.updateConfig(config);
+            ctx.ui.notify(`[pi-emote] alwaysShow enabled — sprite never hides. Saved to user config.`, "info");
+          } else if (setName === "off") {
+            saveUserAlwaysShow(false);
+            ({ config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd));
+            animator.updateConfig(config);
+            ctx.ui.notify(`[pi-emote] alwaysShow disabled — sprite hides below ${config.hideBelow} columns. Saved to user config.`, "info");
+          } else {
+            ctx.ui.notify(`[pi-emote] Usage: /emote always-show on|off`, "warning");
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          ctx.ui.notify(`[pi-emote] Failed to set alwaysShow: ${message}`, "error");
+        }
+        return;
+      }
+
       if (subcommand !== "set" || !setName || extra.length > 0) {
-        ctx.ui.notify(`[pi-emote] Usage: /emote list or /emote set <${sets.join("|")}>`, "warning");
+        ctx.ui.notify(`[pi-emote] Usage: /emote (menu), /emote list, /emote set <name>, /emote image-size <cols>, or /emote always-show on|off`, "warning");
         return;
       }
 
@@ -236,7 +450,7 @@ export default function (pi: ExtensionAPI) {
 
     // Re-create renderer in case terminal capabilities changed
     lastResolved = resolveRenderer(config.terminals, userConfiguredTerminals);
-    renderer = createRendererFromResolved(lastResolved, config.size);
+    renderer = createRendererFromResolved(lastResolved, resolveImageSize(config));
     animator.setRenderer(renderer);
 
     if (lastResolved.warning) {

@@ -15,7 +15,14 @@ function formatTokens(count: number): string {
 
 // --- Info panel ---
 
-function buildInfoLines(width: number, config: Config, ctxRef: any, pi: any, theme: any): string[] {
+/** Resolve imageSize from config — defaults to `size` when not set. */
+function resolveImageSize(config: Config): number {
+  const v = config.imageSize;
+  if (typeof v === "number" && v > 0) return v;
+  return config.size;
+}
+
+function buildInfoLines(width: number, gridSize: number, ctxRef: any, pi: any, theme: any): string[] {
   const lines: string[] = [];
   if (!ctxRef) return lines;
 
@@ -52,7 +59,7 @@ function buildInfoLines(width: number, config: Config, ctxRef: any, pi: any, the
 
   lines.push(`$${totalCost.toFixed(3)}`);
 
-  const infoWidth = width - config.size - 5;
+  const infoWidth = width - gridSize - 5;
   return lines.map(l => {
     if (visibleWidth(l) > infoWidth) return truncateToWidth(l, infoWidth, "…");
     return l;
@@ -65,11 +72,11 @@ function buildInfoLines(width: number, config: Config, ctxRef: any, pi: any, the
  * Kitty image layout: image sequence on row 0 (zero-width, cursor doesn't move),
  * avatarPad fills the space. Info text beside the image on all rows.
  */
-function renderKittyFrame(frame: RenderedFrame & { kind: "image" }, width: number, config: Config, infoLines: string[], borderColor: (s: string) => string): string[] {
+function renderKittyFrame(frame: RenderedFrame & { kind: "image" }, width: number, gridSize: number, infoLines: string[], borderColor: (s: string) => string): string[] {
   const sep = borderColor("│");
   const leftMargin = " ";
-  const avatarPad = " ".repeat(config.size);
-  const avatarSkip = `\x1b[${config.size}C`;
+  const avatarPad = " ".repeat(gridSize);
+  const avatarSkip = `\x1b[${gridSize}C`;
   const useSkip = frame.padMode === "skip";
   const lines: string[] = [];
 
@@ -92,14 +99,13 @@ function renderKittyFrame(frame: RenderedFrame & { kind: "image" }, width: numbe
  * writing. By placing the image on the LAST widget row with cursor-up
  * positioning, the image is rendered AFTER all line clears. It extends
  * downward over rows that already have text, filling the image area
- * (cols 1–size) without being erased. Text in cols (size+1)+ is preserved.
+ * (cols 1–gridSize) without being erased. Text in cols (gridSize+1)+ is preserved.
  *
  * Layout: frame.rows total (frame.rows-1 text rows + 1 image row).
  */
-function renderITermFrame(frame: RenderedFrame & { kind: "image" }, width: number, config: Config, infoLines: string[], borderColor: (s: string) => string): string[] {
+function renderITermFrame(frame: RenderedFrame & { kind: "image" }, width: number, gridSize: number, infoLines: string[], borderColor: (s: string) => string): string[] {
   const sep = borderColor("│");
-  const size = config.size;
-  const skipPad = `\x1b[${1 + size}C`;
+  const skipPad = `\x1b[${1 + gridSize}C`;
   const lines: string[] = [];
 
   for (let i = 0; i < frame.rows; i++) {
@@ -177,7 +183,7 @@ export function createWidgetFactory(deps: WidgetDeps) {
       render(width: number): string[] {
         const { animator, config } = deps;
 
-        if (width < config.hideBelow) return [];
+        if (!config.alwaysShow && width < config.hideBelow) return [];
 
         const frame = animator.getRenderedFrame();
         if (!frame) {
@@ -191,16 +197,19 @@ export function createWidgetFactory(deps: WidgetDeps) {
         const borderColor = (theme as any).getThinkingBorderColor?.(thinkingLevel)
           ?? ((s: string) => theme.fg("border", s));
         const border = borderColor("─".repeat(width));
-        const infoLines = buildInfoLines(width, config, deps.getCtxRef(), deps.pi, theme);
+
+        // Image protocols use imageSize; ASCII/text fallbacks use size
+        const gridSize = frame.kind === "image" ? resolveImageSize(config) : config.size;
+        const infoLines = buildInfoLines(width, gridSize, deps.getCtxRef(), deps.pi, theme);
 
         const lines: string[] = [];
         lines.push(border);
 
         if (frame.kind === "image") {
           if (frame.cursorAdvances) {
-            lines.push(...renderITermFrame(frame, width, config, infoLines, borderColor));
+            lines.push(...renderITermFrame(frame, width, gridSize, infoLines, borderColor));
           } else {
-            lines.push(...renderKittyFrame(frame, width, config, infoLines, borderColor));
+            lines.push(...renderKittyFrame(frame, width, gridSize, infoLines, borderColor));
           }
         } else if (frame.kind === "placeholder") {
           lines.push(...renderPlaceholderFrame(frame, width, config, infoLines, borderColor));

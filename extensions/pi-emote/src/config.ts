@@ -55,12 +55,30 @@ export function saveUserDefaultEmoteSet(setName: string): void {
   writeFileSync(path, `${JSON.stringify(userConfig, null, 2)}\n`, "utf-8");
 }
 
+export function saveUserImageSize(value: number): void {
+  const path = getUserConfigPath();
+  const userConfig = loadJsonFile(path) ?? {};
+  userConfig.imageSize = value;
+
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(userConfig, null, 2)}\n`, "utf-8");
+}
+
+export function saveUserAlwaysShow(value: boolean): void {
+  const path = getUserConfigPath();
+  const userConfig = loadJsonFile(path) ?? {};
+  userConfig.alwaysShow = value;
+
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(userConfig, null, 2)}\n`, "utf-8");
+}
+
 const DEFAULTS: Config = {
   enabled: true,
   debug: false,
   size: 8,
   readingSpeed: 4,
-  hideBelow: 40,
+  hideBelow: 30,
   holdDuration: { hi: 2000, success: 1200, failure: 1200 },
   blinkInterval: [3000, 6000],
   talkTickMs: 120,
