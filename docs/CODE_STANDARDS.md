@@ -9,6 +9,8 @@ Baseline standards for this pi package repository.
 - Declare package resources in the root `package.json` under the `pi` key.
 - Treat `extensions/` as the source of installable extension packages for this repository, even when an extension began as a vendored or modified copy of an upstream extension.
 - Extension documentation should point users to install this parent repository with `pi install .` from the repository root; upstream npm/git install commands may be linked as standalone references only, not presented as the normal install path for this repo.
+- Each extension directory under `extensions/` should include its own `README.md` with extension-specific usage, setup, commands, configuration, and troubleshooting details.
+- Keep the root `README.md` focused on repository-level install/orientation and link to per-extension READMEs instead of duplicating detailed extension usage.
 - Keep temporary AI coordination artifacts under `docs/` and clearly mark them temporary.
 
 ## Extensions

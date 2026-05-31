@@ -5,6 +5,7 @@
   - Added repository identity to `docs/AUTHOR_NOTES.md`: this is Jarod's personal pi extensions repo used with his pi setup.
   - Added parent-package/vendored-extension documentation rules to `docs/CODE_STANDARDS.md`, including accurate `JarodMica/jarods-pi-extensions` install context and avoiding placeholder/upstream install instructions as the primary path.
   - Updated validation guidance to use `pi install .` from the repository root.
+  - Added a standard requiring each extension to maintain its own `README.md` for extension-specific usage/setup details while keeping the root README repository-focused.
 - **README.md Rewrite**: Overhauled root README to be useful for a new user cloning the repo on a different machine. Key changes:
   - Added link to pi coding agent upstream
   - Added prerequisites section (pi CLI, Node.js, optional Chafa for Windows emotes)
