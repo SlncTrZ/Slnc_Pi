@@ -1,128 +1,79 @@
-# My Pi Extensions
+# Jarod's Pi Extensions
 
-Personal collection of extensions, skills, and prompts for pi.
+A collection of extensions for the [pi coding agent](https://github.com/badlogic/pi-mono/).
+
+Includes a notification system (beep / TTS), an animated pixel-art emote widget, and an MCP server adapter — all installable in one step.
+
+## Prerequisites
+
+- **pi** installed (`npm install -g @earendil-works/pi-coding-agent`)
+- **Node.js** 18+
+
+### Optional (Windows)
+- For the emote extension's image rendering, install [Chafa](https://hpjansson.org/chafa/) via `winget install hpjansson.Chafa` and run pi in **Windows Terminal**.
 
 ## Install
 
 ```bash
-pi install ./pi-extensions
+git clone https://github.com/JarodMica/jarods-pi-extensions.git
+cd jarods-pi-extensions
+pi install .
 ```
+
+Then start pi (or run `/reload` if already running).
 
 ## Uninstall
 
 ```bash
-pi remove ./pi-extensions
+pi remove .
 ```
 
-## Usage
+## Extensions
 
-### Notification Extension
-Enable audio notifications for assistant responses.
+| Extension | Description | Docs |
+|-----------|-------------|------|
+| **[notification](extensions/notification/)** | Audio notifications — beep, TTS, or both (4 engine backends) | [README](extensions/notification/README.md) |
+| **[pi-emote](extensions/pi-emote/)** | Animated pixel-art avatar that reacts to agent activity | [README](extensions/pi-emote/README.md) |
+| **[pi-mcp-adapter](extensions/pi-mcp-adapter/)** | Connect to MCP servers via a single ~200-token proxy tool | [README](extensions/pi-mcp-adapter/README.md) |
 
-**Setup:**
-Run `/notification` to open the interactive configuration menu. Navigate with ↑↓, press Enter to select or drill into submenus, and Escape to go back.
+## Repository Structure
 
-**Menu structure:**
-- **Mode** — Choose `off`, `beep`, `tts`, or `both`
-- **Engine** — Select and configure a TTS engine:
-  - `fish` — High-quality streaming TTS via Fish Audio WebSocket (requires API key)
-  - `openai-compatible` — OpenAI-compatible `/v1/audio/speech` providers (API key optional, provider-dependent)
-  - `windows-native` — Local Windows SAPI (no key required, Windows only)
-  - `vllm-omni` — Local vLLM-Omni server (S2-Pro) via WebSocket streaming PCM audio
-- **Debug** — Test beep playback and TTS synthesis
-- **Status** — Show current configuration summary
-
-**vllm-omni setup:**
-Before using the `vllm-omni` engine you need a running vLLM-Omni server (e.g. S2-Pro) accessible at the configured base URL (default `http://localhost:8091`). Once the server is running:
-
-1. Run `/notification` → Engine → `vllm-omni`
-2. **Browse audio (.wav)** — pick your voice reference `.wav` file
-3. **Browse transcript (.txt)** — pick the matching transcript (optional but recommended)
-4. **Test server connection** — verify the server is reachable
-5. **Upload & cache voice** — upload and cache the voice on the server
-6. **Test TTS playback** — play a short test sentence to confirm everything works
-
-Voice name is auto-derived from the audio filename. The transcript is read from the selected `.txt` file — no manual typing needed.
-
-**Startup flag:**
-Override the notification mode at launch:
-```bash
-pi --notification beep   # or tts, both, off
+```
+jarods-pi-extensions/
+├── extensions/
+│   ├── notification/     — Notification extension (beep / TTS)
+│   ├── pi-emote/         — Pixel-art emote widget (vendored from cgxeiji/pi-emote)
+│   └── pi-mcp-adapter/   — MCP server adapter (vendored from nicobailon/pi-mcp-adapter)
+├── skills/               — Skill directories (placeholder, add SKILL.md files)
+├── prompts/              — Prompt templates (placeholder, add .md files)
+├── docs/
+│   └── CONFIG.md         — Notification configuration reference
+├── package.json          — Root package manifest (pi discovers extensions/skills/prompts)
+└── tsconfig.json         — TypeScript config
 ```
 
-See `docs/CONFIG.md` for environment variables, defaults, and settings file details.
+The root `package.json` declares `pi.extensions`, `pi.skills`, and `pi.prompts` paths. Pi discovers extension subdirectories under `./extensions` and honors each subpackage's `pi.extensions` manifest, so `pi install .` is the single install command.
 
-### Emote Extension
-Change the active pi-emote face set from inside pi.
+## Adding Your Own Extensions, Skills, or Prompts
 
-**Interactive menu:** Run `/emote` (no arguments) to open the drill-down configuration menu. Navigate with ↑↓, press Enter to select or drill into submenus, and Escape to go back or close.
+- **Extensions:** Create a subdirectory under `extensions/` with a `package.json` containing a `pi.extensions` array pointing to your entry point.
+- **Skills:** Add a directory under `skills/` with a `SKILL.md` file.
+- **Prompts:** Add Markdown files under `prompts/`.
 
-**Menu structure:**
-- **Emote Set** — Select from available emote sets (current set marked with ▸)
-- **Display** — Configure display options:
-  - **Image Size** — Set sprite grid width (2–120 columns)
-  - **Always Show** — Toggle persistent visibility on narrow terminals
-- **Status** — Show current configuration summary
+After adding content, run `/reload` inside pi to pick up the changes.
 
-**Subcommands (backward compatible):** All settings save to `~/.pi/agent/extensions/pi-emote/config.json` and apply immediately.
+## Vendored Extensions
 
-```text
-/emote list
-/emote set aza_choi_nobg
-/emote image-size 32
-/emote always-show on
-```
+`pi-emote` and `pi-mcp-adapter` are vendored copies of their upstream repositories. To update them:
 
-- `/emote list` — show current settings and available emote sets
-- `/emote set <name>` — change the emote set (autocompletes)
-- `/emote image-size <cols>` — change image sprite size (2–120 columns, applies immediately)
-- `/emote always-show on|off` — keep the sprite visible even on narrow terminals
+1. Pull changes from the upstream repo into `upstream_extensions/<name>/`
+2. Copy the updated files into `extensions/<name>/`
+3. Commit and test
 
-**TTS Sync:** When the notification extension is set to `tts` or `both` mode, the emote's mouth animation syncs to TTS audio playback. During token streaming the emote stays in its context-appropriate state (think, tool, etc.) and only enters a talking animation when TTS audio begins. It returns to idle when playback finishes.
+## Upstream Sources
 
-## Structure
-
-- `extensions/` — Extension package directories. Each subdirectory can include its own `package.json` with a `pi.extensions` entry.
-  - `extensions/notification/` — Local notification extension package.
-  - `extensions/pi-emote/` — Vendored third-party pi-emote extension package.
-- `skills/` — Skill directories with `SKILL.md`
-- `prompts/` — Prompt template Markdown files
-
-The root `package.json` points pi at `./extensions`; pi discovers one level of extension subdirectories and honors each subpackage's `pi.extensions` manifest. This keeps `pi install .` as the single local install command.
-
-## Multi-Agent Checkpoint Workflow
-
-Create a shared base checkpoint after committing the starting state:
-
-```bash
-git tag notification-plan-base
-git push origin notification-plan-base
-```
-
-Start each agent from that same checkpoint on its own branch:
-
-```bash
-git checkout -B agent-1-notification notification-plan-base
-```
-
-After an agent finishes its attempt, commit and push that branch:
-
-```bash
-git add .
-git commit -m "Agent 1 notification implementation"
-git push origin agent-1-notification
-```
-
-Repeat from the same checkpoint for each additional agent:
-
-```bash
-git checkout -B agent-2-notification notification-plan-base
-git checkout -B agent-3-notification notification-plan-base
-```
-
-For separate working folders, create worktrees from the checkpoint:
-
-```bash
-git worktree add ../pi-extensions-agent-1 -b agent-1-notification notification-plan-base
-git worktree add ../pi-extensions-agent-2 -b agent-2-notification notification-plan-base
-```
+| Extension | Upstream |
+|-----------|----------|
+| `pi-emote` | [cgxeiji/pi-emote](https://github.com/cgxeiji/pi-emote) |
+| `pi-mcp-adapter` | [nicobailon/pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) |
+| `notification` | Local / custom |

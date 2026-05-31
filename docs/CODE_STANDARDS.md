@@ -4,8 +4,11 @@
 Baseline standards for this pi package repository.
 
 ## Package Structure
+- This repository is Jarod's parent pi package, installed as a whole from `JarodMica/jarods-pi-extensions`.
 - Keep installable pi resources organized under conventional directories: `extensions/`, `skills/`, `prompts/`, and `themes/` when needed.
-- Declare package resources in `package.json` under the `pi` key.
+- Declare package resources in the root `package.json` under the `pi` key.
+- Treat `extensions/` as the source of installable extension packages for this repository, even when an extension began as a vendored or modified copy of an upstream extension.
+- Extension documentation should point users to install this parent repository with `pi install .` from the repository root; upstream npm/git install commands may be linked as standalone references only, not presented as the normal install path for this repo.
 - Keep temporary AI coordination artifacts under `docs/` and clearly mark them temporary.
 
 ## Extensions
@@ -14,6 +17,8 @@ Baseline standards for this pi package repository.
 - Export a default function that receives `ExtensionAPI`.
 - Keep extension side effects explicit and minimal at startup.
 - Use pi event hooks and APIs instead of shelling out when a first-class API exists.
+- When editing a vendored upstream extension, preserve clear upstream attribution while making install, setup, and repository links accurate for Jarod's parent repository.
+- Do not leave placeholder clone URLs, generic `YOUR_USERNAME` examples, or primary instructions that install the upstream package instead of this repository.
 
 ## Safety And Configuration
 - Avoid destructive behavior by default.
@@ -36,5 +41,5 @@ git checkout -B agent-1-notification notification-plan-base
 ```
 
 ## Validation
-- Validate extension loading with `pi install ./pi-extensions` or an equivalent local path, then `/reload` after edits.
+- Validate extension loading from the repository root with `pi install .` or an equivalent local path, then `/reload` after edits.
 - For behavior changes, include a manual smoke-check command or flow in the feature plan or README.

@@ -180,8 +180,16 @@ export async function openMenu(
           }
           if (matchesKey(data, "backspace")) {
             inputBuffer = inputBuffer.slice(0, -1);
-          } else if (data.length === 1 && data !== "\n" && data !== "\r") {
-            inputBuffer += data;
+          } else if (matchesKey(data, "escape")) {
+            // ignore stray escape chars during input
+          } else {
+            // Handle bracketed paste (\x1b[200~...content...\x1b[201~) and plain keystrokes
+            const pasteMatch = data.match(/^\x1b\[200~(.*)\x1b\[201~$/s);
+            if (pasteMatch) {
+              inputBuffer += pasteMatch[1].replace(/\r$/, "");
+            } else if (data.length === 1 && data !== "\n" && data !== "\r") {
+              inputBuffer += data;
+            }
           }
           refresh();
           return;

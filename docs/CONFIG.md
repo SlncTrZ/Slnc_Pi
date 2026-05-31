@@ -15,6 +15,7 @@ Menu sections:
 |---|---|
 | **Mode** | Set notification mode: `off`, `beep`, `tts`, `both` |
 | **Engine** | Select TTS engine and configure per-engine settings |
+| **TTS Output** | Configure how TTS handles output (verbose vs. summarized) |
 | **Debug** | Test beep playback and TTS synthesis |
 | **Status** | Show current configuration summary |
 
@@ -49,6 +50,15 @@ Each engine has its own submenu under **Engine**:
 
 Voice name is auto-derived from the audio file name (e.g. `my_voice.wav` → `my_voice`).
 The transcript is read directly from the selected `.txt` file.
+
+### TTS Output Configuration
+Under **TTS Output**:
+
+- **Output Style** — Choose `verbose` (read full output) or `shortened` (summarize before TTS)
+- **Select summarizer model** — Pick an LLM model from those available via `/model` (must have auth configured)
+- **Set skip threshold (sentences)** — Responses shorter than this many sentences are not summarized (default: 4)
+
+When `shortened` is active, the assistant response is sent to the configured summarizer model as a separate API call. The summarizer returns a 3-5 sentence spoken summary, shown below the final output as a dim custom message that is not sent to the LLM as chat context. If the summarizer call fails, an error is shown and TTS is skipped for that message.
 
 ## Startup Flag
 Override the notification mode at launch:
@@ -86,6 +96,13 @@ Settings are persisted to `~/.pi/agent/notification.json` (via `getAgentDir()`).
   - `voiceCached`: Whether the voice has been uploaded to the server.
   - `maxNewTokens`: Maximum generation tokens (default `256`).
   - Voice name is auto-derived from the audio file basename.
+- `ttsOutputMode`: How TTS handles the assistant output.
+  - `verbose`: Read the full response as-is (default).
+  - `shortened`: Send the response to an LLM summarizer first, then read the summary. Skips summarization if the response has fewer sentences than `summarizer.skipThreshold`.
+- `summarizer`:
+  - `provider`: The model provider (e.g. `anthropic`). Selected from models available via `/model`.
+  - `modelId`: The model ID (e.g. `claude-sonnet-4-20250514`).
+  - `skipThreshold`: Minimum sentence count before summarization is applied (default `4`).
 
 ## Environment Variables
 API keys can be provided via environment variables to override stored settings:
@@ -117,3 +134,6 @@ When both the notification and pi-emote extensions are installed, the emote's mo
 | vLLM-Omni voice name | auto-derived from audio filename |
 | vLLM-Omni max_new_tokens | `256` |
 | vLLM-Omni sample rate | `44100` (PCM16 mono) |
+| TTS output mode | `verbose` |
+| Summarizer model | not set |
+| Summarizer skip threshold | `4` sentences |

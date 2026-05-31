@@ -3,6 +3,8 @@
 ## Purpose
 User-authored notes that guide AI documentation updates in this repository.
 
+This is Jarod's personal repository of pi extensions that he uses with his own pi setup.
+
 ## Documentation Standards
 - Treat repository docs and `docs/AUTHOR_NOTES.md` as inputs that guide documentation edits.
 - Keep this file limited to author-facing editorial guidance, not repository workflow policy.

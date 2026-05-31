@@ -6,6 +6,7 @@ import { connect as connectTls, type TLSSocket } from "node:tls";
 import { connect as connectNet, type Socket } from "node:net";
 import { randomBytes } from "node:crypto";
 import { getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
 import { openMenu, type MenuItem } from "./menu";
 
 type NotificationMode = "off" | "beep" | "tts" | "both";
@@ -32,12 +33,22 @@ type VllmOmniSettings = {
 	maxNewTokens?: number;
 };
 
+type TtsOutputMode = "verbose" | "shortened";
+
+type SummarizerSettings = {
+	provider?: string;
+	modelId?: string;
+	skipThreshold?: number;
+};
+
 type NotificationSettings = {
 	mode?: NotificationMode;
 	ttsEngine?: TtsEngine;
 	fish?: FishSettings;
 	openAiCompatible?: OpenAiCompatibleSettings;
 	vllmOmni?: VllmOmniSettings;
+	ttsOutputMode?: TtsOutputMode;
+	summarizer?: SummarizerSettings;
 };
 
 const MODES = ["off", "beep", "tts", "both"] as const;
@@ -45,6 +56,7 @@ const TTS_ENGINES = ["fish", "openai-compatible", "windows-native", "vllm-omni"]
 const SETTINGS_PATH = join(getAgentDir(), "notification.json");
 const BEEP_PATH = join(__dirname, "beep.wav");
 const STATUS_KEY = "notification";
+const SUMMARY_MESSAGE_TYPE = "notification-tts-summary";
 const DEFAULT_FISH_REFERENCE_ID = "6d370109274d4c29ab83ad6b6af77978";
 const DEFAULT_FISH_MODEL = "s2-pro";
 const DEFAULT_OPENAI_COMPATIBLE_BASE_URL = "http://localhost:8000/v1";
@@ -52,8 +64,15 @@ const DEFAULT_OPENAI_COMPATIBLE_MODEL = "tts-1";
 const DEFAULT_OPENAI_COMPATIBLE_VOICE = "alloy";
 const DEFAULT_VLLM_OMNI_BASE_URL = "http://localhost:8091";
 const DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS = 256;
+const DEFAULT_TTS_OUTPUT_MODE: TtsOutputMode = "verbose";
+const DEFAULT_SUMMARIZER_SKIP_THRESHOLD = 4;
 const VLLM_OMNI_SAMPLE_RATE = 44100;
 const FISH_STREAM_SAMPLE_RATE = 44100;
+const TTS_OUTPUT_MODES = ["verbose", "shortened"] as const;
+
+function isTtsOutputMode(value: string): value is TtsOutputMode {
+	return (TTS_OUTPUT_MODES as readonly string[]).includes(value);
+}
 
 function isNotificationMode(value: string): value is NotificationMode {
 	return (MODES as readonly string[]).includes(value);
@@ -92,6 +111,10 @@ function defaultSettings(): Required<Pick<NotificationSettings, "mode" | "ttsEng
 			baseUrl: DEFAULT_VLLM_OMNI_BASE_URL,
 			maxNewTokens: DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS,
 		},
+		ttsOutputMode: DEFAULT_TTS_OUTPUT_MODE,
+		summarizer: {
+			skipThreshold: DEFAULT_SUMMARIZER_SKIP_THRESHOLD,
+		},
 	};
 }
 
@@ -105,6 +128,8 @@ function normalizeSettings(settings: NotificationSettings): NotificationSettings
 		fish: { ...defaults.fish, ...settings.fish },
 		openAiCompatible: { ...defaults.openAiCompatible, ...settings.openAiCompatible },
 		vllmOmni: { ...defaults.vllmOmni, ...settings.vllmOmni },
+		ttsOutputMode: settings.ttsOutputMode && isTtsOutputMode(settings.ttsOutputMode) ? settings.ttsOutputMode : defaults.ttsOutputMode,
+		summarizer: { ...defaults.summarizer, ...settings.summarizer },
 	};
 }
 
@@ -1148,6 +1173,155 @@ function stripMarkdownForSpeech(markdown: string): string {
 	return text;
 }
 
+/** Count approximate sentences using terminal punctuation (. ! ?). */
+function countSentences(text: string): number {
+	const matches = text.match(/[.!?]+\s+/g);
+	return matches ? matches.length : (text.trim().length > 0 ? 1 : 0);
+}
+
+function joinModelApiUrl(baseUrl: string, path: string): string {
+	const base = baseUrl.trim().replace(/\/+$/, "");
+	let suffix = path.startsWith("/") ? path : `/${path}`;
+	if (base.endsWith("/v1") && suffix.startsWith("/v1/")) suffix = suffix.slice(3);
+	return `${base}${suffix}`;
+}
+
+/**
+ * Send text to an LLM for summarization. Returns the summary string on success,
+ * or null on failure (error is shown via ctx.ui.notify).
+ */
+async function summarizeText(
+	text: string,
+	settings: NotificationSettings,
+	ctx: ExtensionContext,
+): Promise<string | null> {
+	const summarizer = settings.summarizer;
+	if (!summarizer?.provider || !summarizer?.modelId) {
+		notifyFailure(ctx, "Summarizer not configured. Select a model in the notification menu.");
+		return null;
+	}
+
+	const model = ctx.modelRegistry.find(summarizer.provider, summarizer.modelId);
+	if (!model) {
+		notifyFailure(ctx, `Summarizer model "${summarizer.provider}:${summarizer.modelId}" not found.`);
+		return null;
+	}
+
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model).catch((err: unknown) => ({ ok: false as const, error: String(err) }));
+	if (!auth.ok) {
+		notifyFailure(ctx, `Summarizer auth failed: ${auth.error}`);
+		return null;
+	}
+
+	const baseUrl = model.baseUrl.replace(/\/+$/, "");
+	const headers: Record<string, string> = { "Content-Type": "application/json", ...auth.headers };
+	if (auth.apiKey && !headers.Authorization && !headers["x-api-key"]) {
+		if (model.api === "anthropic-messages") {
+			headers["x-api-key"] = auth.apiKey;
+			headers["anthropic-version"] = headers["anthropic-version"] ?? "2023-06-01";
+		} else {
+			headers.Authorization = `Bearer ${auth.apiKey}`;
+		}
+	}
+
+	const summarizerPrompt = [
+		"You are a text-to-speech summarizer. Your job is to convert verbose assistant outputs into concise spoken summaries.",
+		"Summarize the following assistant response as a concise spoken summary, focusing on what was accomplished and key outcomes.",
+		"If the response contains salient points, suggestions, ideas, or important reasoning, make sure to preserve those details and the reasoning behind them.",
+		"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
+		"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
+	].join(" ");
+	const maxSummaryTokens = Math.max(1024, model.maxTokens || 4096);
+
+	const body = (() => {
+		const api = model.api;
+		if (api === "anthropic-messages") {
+			return JSON.stringify({
+				model: model.id,
+				max_tokens: maxSummaryTokens,
+				system: summarizerPrompt,
+				messages: [{ role: "user", content: text }],
+			});
+		}
+		if (api === "openai-responses" || api === "openai-codex-responses" || api === "azure-openai-responses") {
+			return JSON.stringify({
+				model: model.id,
+				input: [
+					{ role: "system", content: [{ type: "input_text", text: summarizerPrompt }] },
+					{ role: "user", content: [{ type: "input_text", text }] },
+				],
+				max_output_tokens: maxSummaryTokens,
+			});
+		}
+		// Generic OpenAI chat/completions fallback.
+		return JSON.stringify({
+			model: model.id,
+			messages: [
+				{ role: "system", content: summarizerPrompt },
+				{ role: "user", content: text },
+			],
+			max_tokens: maxSummaryTokens,
+		});
+	})();
+
+	const url = (() => {
+		const api = model.api;
+		if (api === "anthropic-messages") return joinModelApiUrl(baseUrl, "/v1/messages");
+		if (api === "openai-responses" || api === "openai-codex-responses" || api === "azure-openai-responses") return joinModelApiUrl(baseUrl, "/v1/responses");
+		return joinModelApiUrl(baseUrl, "/v1/chat/completions");
+	})();
+
+	const response = await fetch(url, {
+		method: "POST",
+		headers,
+		body,
+		signal: AbortSignal.timeout(30_000),
+	});
+
+	if (!response.ok) {
+		const errText = await response.text().catch(() => "");
+		notifyFailure(ctx, `Summarizer HTTP ${response.status}: ${errText.slice(0, 300)}`);
+		return null;
+	}
+
+	const data = (await response.json()) as Record<string, unknown>;
+
+	// Extract text from Anthropic or OpenAI-style response
+	const content = (() => {
+		if (model.api === "anthropic-messages") {
+			const contentArr = (data.content as Array<{ type?: string; text?: string }>) ?? [];
+			return contentArr.filter((c) => c.type === "text").map((c) => c.text ?? "").join(" ");
+		}
+		if (model.api === "openai-responses" || model.api === "openai-codex-responses" || model.api === "azure-openai-responses") {
+			if (typeof data.output_text === "string") return data.output_text;
+			const output = data.output as Array<{
+				role?: string;
+				content?: Array<{ type?: string; text?: string }>;
+			}> | undefined;
+			const assistantMsg = output?.find((item) => item.role === "assistant");
+			return assistantMsg?.content
+				?.filter((part) => part.type === "message_content")
+				.map((part) => part.text ?? "")
+				.join(" ")
+				?? "";
+		}
+		const choice = (data.choices as Array<{ finish_reason?: string; message?: { content?: string; reasoning_content?: string } }>)?.[0];
+		const message = choice?.message;
+		if (!message?.content && choice?.finish_reason === "length" && message?.reasoning_content) {
+			console.error(`[notification] Summarizer exhausted output budget in reasoning for ${model.provider}:${model.id}.`);
+		}
+		return message?.content ?? "";
+	})();
+
+	if (!content.trim()) {
+		const rawPreview = JSON.stringify(data).slice(0, 500);
+		notifyFailure(ctx, `Summarizer returned empty response. Model API: ${model.api}. Raw: ${rawPreview}`);
+		return null;
+	}
+
+	return content.trim();
+}
+
 function getAssistantText(message: unknown): string {
 	const content = (message as { content?: unknown }).content;
 	if (!Array.isArray(content)) return "";
@@ -1187,6 +1361,9 @@ function getStatus(settings: NotificationSettings): string {
 		`vLLM-Omni audio: ${settings.vllmOmni?.audioPath ?? "not set"}`,
 		`vLLM-Omni transcript: ${settings.vllmOmni?.refTextPath ?? "not set"}`,
 		`vLLM-Omni voice cached: ${settings.vllmOmni?.voiceCached ? "yes" : "no"}`,
+		`TTS output: ${settings.ttsOutputMode ?? DEFAULT_TTS_OUTPUT_MODE}`,
+		`Summarizer model: ${settings.summarizer?.provider && settings.summarizer?.modelId ? `${settings.summarizer.provider}:${settings.summarizer.modelId}` : "not set"}`,
+		`Summarizer skip threshold: ${settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD} sentences`,
 	].join("\n");
 }
 
@@ -1258,6 +1435,12 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	const tts = new TtsQueue(() => settings);
 	tts.setEvents(pi.events);
 
+	pi.registerMessageRenderer(SUMMARY_MESSAGE_TYPE, (message: { content?: unknown }, _options: unknown, theme: any) => {
+		const box = new Box(1, 1, (text: string) => theme.bg("customMessageBg", text));
+		box.addChild(new Text(theme.fg("dim", `TTS summary: ${String(message.content ?? "")}`), 0, 0));
+		return box;
+	});
+
 	pi.registerFlag("notification", {
 		description: "Notification mode: off, beep, tts, or both",
 		type: "string",
@@ -1278,6 +1461,31 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		settings.mode = nextMode;
 		persistSettings(ctx);
 		pi.events.emit("tts:mode", { mode: nextMode });
+	}
+
+	async function enqueueTtsOutput(text: string, ctx: ExtensionContext): Promise<void> {
+		let ttsText = text;
+		if (settings.ttsOutputMode === "shortened") {
+			try {
+				const cleaned = stripMarkdownForSpeech(text);
+				const threshold = settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
+				if (countSentences(cleaned) > threshold) {
+					const summary = await summarizeText(cleaned, settings, ctx);
+					if (summary === null) return; // error already shown, skip TTS
+					ttsText = summary;
+					pi.sendMessage({
+						customType: SUMMARY_MESSAGE_TYPE,
+						content: summary,
+						display: true,
+						details: { timestamp: Date.now() },
+					});
+				}
+			} catch (error) {
+				notifyFailure(ctx, `Summarizer failed: ${formatError(error)}`);
+				return;
+			}
+		}
+		tts.enqueue(ttsText);
 	}
 
 	pi.on("input", async (event) => {
@@ -1312,7 +1520,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 
 		if (mode === "tts" || mode === "both") {
 			tts.setContext(ctx);
-			tts.enqueue(getAssistantText(event.message));
+			void enqueueTtsOutput(getAssistantText(event.message), ctx);
 		}
 	});
 
@@ -1349,6 +1557,11 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		const oaUrl = settings.openAiCompatible?.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
 		const oaModel = settings.openAiCompatible?.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL;
 		const oaVoice = settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE;
+		const currentOutputMode = settings.ttsOutputMode ?? DEFAULT_TTS_OUTPUT_MODE;
+		const summarizerModelLabel = settings.summarizer?.provider && settings.summarizer?.modelId
+			? `${settings.summarizer.provider}:${settings.summarizer.modelId}`
+			: "not set";
+		const summarizerThreshold = settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
 
 		return [
 			{
@@ -1419,6 +1632,48 @@ export default function notificationExtension(pi: ExtensionAPI) {
 								{ type: "action", id: "vllm:test-tts", label: "Test TTS playback" },
 							];
 						},
+					},
+				],
+			},
+			{
+				type: "submenu",
+				id: "tts-output",
+				label: "TTS Output",
+				children: () => [
+					{
+						type: "submenu",
+						id: "output-mode",
+						label: "Output Style",
+						children: () =>
+							TTS_OUTPUT_MODES.map((m) => ({
+								type: "action" as const,
+								id: `output:${m}`,
+								label: m === currentOutputMode ? `▸ ${m} (current)` : m,
+							})),
+					},
+					{
+						type: "submenu",
+						id: "summarizer:select-model",
+						label: `Select summarizer model  (${summarizerModelLabel})`,
+						children: () => {
+							const models = getCurrentCtx()?.modelRegistry.getAvailable() ?? [];
+							if (models.length === 0) return [{ type: "action" as const, id: "summarizer:no-models", label: "No authenticated models available" }];
+							return models.map((m: any) => {
+								const selected = settings.summarizer?.provider === m.provider && settings.summarizer?.modelId === m.id;
+								return {
+									type: "action" as const,
+									id: `summarizer-model:${encodeURIComponent(m.provider)}:${encodeURIComponent(m.id)}`,
+									label: `${selected ? "▸ " : ""}${m.provider}:${m.id} (${m.name})`,
+								};
+							});
+						},
+					},
+					{
+						type: "input",
+						id: "summarizer:set-threshold",
+						label: "Set skip threshold (sentences)",
+						prompt: `Summarization skip threshold (sentences, current: ${summarizerThreshold}):`,
+						currentValue: String(summarizerThreshold),
 					},
 				],
 			},
@@ -1678,6 +1933,45 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 			} finally {
 				if (diagnostic) deleteFileBestEffort(diagnostic.path);
 			}
+			return;
+		}
+
+		// TTS Output
+		if (id.startsWith("output:")) {
+			const m = id.slice(7) as TtsOutputMode;
+			if (isTtsOutputMode(m)) {
+				settings.ttsOutputMode = m;
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify(`TTS output set to ${m}`, "info");
+			}
+			return;
+		}
+		if (id === "summarizer:no-models") {
+			if (ctx) ctx.ui.notify("No models with configured auth available.", "warning");
+			return;
+		}
+		if (id.startsWith("summarizer-model:")) {
+			const [, encodedProvider, encodedModelId] = id.split(":");
+			const provider = decodeURIComponent(encodedProvider ?? "");
+			const modelId = decodeURIComponent(encodedModelId ?? "");
+			if (!provider || !modelId) {
+				if (ctx) ctx.ui.notify("Could not parse selected model.", "error");
+				return;
+			}
+			settings.summarizer = { ...settings.summarizer, provider, modelId };
+			persistSettings(ctx);
+			if (ctx) ctx.ui.notify(`Summarizer model set to ${provider}:${modelId}`, "info");
+			return;
+		}
+		if (id === "summarizer:set-threshold") {
+			const parsed = value ? parseInt(value, 10) : NaN;
+			if (isNaN(parsed) || parsed < 1) {
+				if (ctx) ctx.ui.notify("Invalid threshold. Must be a positive integer.", "error");
+				return;
+			}
+			settings.summarizer = { ...settings.summarizer, skipThreshold: parsed };
+			persistSettings(ctx);
+			if (ctx) ctx.ui.notify(`Skip threshold set to ${parsed} sentences`, "info");
 			return;
 		}
 

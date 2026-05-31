@@ -1,7 +1,7 @@
 # CGx's pi-emote
 > This is sourced from: https://github.com/cgxeiji/pi-emote
 
-> **Currently looking to expand the emotes gallery!** If you have an emote set you'd like to submit, please make a PR!
+> **Looking to expand the emotes gallery!** If you have an emote set to submit, please contribute to the [upstream repo](https://github.com/cgxeiji/pi-emote).
 
 Animated pixel-art emote that lives in the top-right corner of your pi TUI session. Reacts to what the agent is doing — thinking, talking, reading, writing, using tools, etc.
 
@@ -11,7 +11,7 @@ Supports Kitty, iTerm2, Sixel, and ASCII rendering.
 
 ## Gallery
 
-Community-contributed emote sets. [Submit yours via PR!](#custom-emotes)
+Community-contributed emote sets.
 
 ### Image Sets
 
@@ -30,9 +30,15 @@ Community-contributed emote sets. [Submit yours via PR!](#custom-emotes)
 
 ## Install
 
+This extension is vendored inside **[Jarod's Pi Extensions](../../README.md)** and is installed by the parent package. From the repository root:
+
 ```bash
-pi install git:github.com/cgxeiji/pi-emote
+pi install .
 ```
+
+Then restart pi or run `/reload` if pi is already running.
+
+For standalone upstream installation outside this repo, see [cgxeiji/pi-emote](https://github.com/cgxeiji/pi-emote).
 
 ## Windows Setup
 

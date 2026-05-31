@@ -1,5 +1,57 @@
 # AI Changelog
 
+## 2026-05-31
+- **Author Notes and Code Standards Updates**:
+  - Added repository identity to `docs/AUTHOR_NOTES.md`: this is Jarod's personal pi extensions repo used with his pi setup.
+  - Added parent-package/vendored-extension documentation rules to `docs/CODE_STANDARDS.md`, including accurate `JarodMica/jarods-pi-extensions` install context and avoiding placeholder/upstream install instructions as the primary path.
+  - Updated validation guidance to use `pi install .` from the repository root.
+- **README.md Rewrite**: Overhauled root README to be useful for a new user cloning the repo on a different machine. Key changes:
+  - Added link to pi coding agent upstream
+  - Added prerequisites section (pi CLI, Node.js, optional Chafa for Windows emotes)
+  - Added `git clone https://github.com/JarodMica/jarods-pi-extensions.git` install instructions (was only local `./pi-extensions`)
+  - Added `/reload` mention after install
+  - Replaced inaccurate "Structure" section (claimed `skills/` and `prompts/` had content; they're empty `.gitkeep` placeholders) with an accurate tree diagram
+  - Added "Adding Your Own Extensions, Skills, or Prompts" section
+  - Added "Vendored Extensions" and "Upstream Sources" sections documenting the pi-emote and pi-mcp-adapter vendoring workflow
+  - Removed "Multi-Agent Checkpoint Workflow" section (internal dev process, not useful for end users)
+  - Kept the repo identity as "Jarod's Pi Extensions"
+  - Added Windows-specific setup guidance for the emote extension (Chafa + Windows Terminal requirement)
+  - Changed title from "My Pi Extensions" to "Jarod's Pi Extensions"
+- **README.md Slim Down and Extension README Audit**: Replaced detailed per-extension usage sections with a table linking to each extension's own README. Created `extensions/notification/README.md` so every extension has its own docs.
+  - Consolidated emote extension docs to reference the vendored README for full details
+  - Updated extension README install sections to describe parent-package installation from the repository root (`pi install .`) instead of placeholder clone URLs or upstream npm/git install commands
+  - Updated MCP adapter setup notes to prefer `/mcp setup` for this vendored extension instead of the standalone npm CLI
+
+## 2026-05-30
+- **TTS Output Summarization**:
+  - Added "TTS Output" configuration with two modes: `verbose` (default, full output) and `shortened` (LLM-summarized before TTS).
+  - `shortened` mode sends the response to a user-selected LLM model (chosen from models available via `/model`) as a separate API call.
+  - Summarizer prompt produces a 3-5 sentence conversational summary, omitting code, tables, and technical details.
+  - Configurable sentence skip threshold (default 4) — short responses pass through without summarization.
+  - If summarizer call fails, error is shown and TTS is skipped for that message.
+  - Menu items: Output Style (verbose/shortened), Select summarizer model, Set skip threshold.
+  - New settings fields: `ttsOutputMode`, `summarizer` (`provider`, `modelId`, `skipThreshold`).
+  - Supports `anthropic-messages`, OpenAI Responses, and OpenAI-compatible chat API formats.
+  - Fixed model selection to use an in-menu submenu instead of nested `ctx.ui.select()`, avoiding UI freezes.
+  - Moved summarization/TTS enqueueing to a background task so `message_end` does not block UI lifecycle or scroll behavior.
+  - Added a dim non-context custom message showing the generated TTS summary below the final output.
+  - Fixed model API URL/header handling for `/v1` base URLs and Anthropic `x-api-key` auth.
+  - Increased summarizer output budget from a fixed 512 tokens to the selected model's `maxTokens` to prevent reasoning models from exhausting the response before emitting summary text.
+  - Updated `docs/CONFIG.md` and `README.md`.
+- **MCP Adapter Integration Audit Corrections**:
+  - Fixed accidental duplicate `dependencies` block in root `package.json` (was repeated 3x).
+  - Hoisted non-pi-provided MCP adapter runtime deps to root `package.json`: `@modelcontextprotocol/ext-apps`, `@modelcontextprotocol/sdk`, `open`, `recheck`, `zod`.
+  - Refreshed `package-lock.json` to match root `package.json`.
+  - Removed nested `extensions/pi-mcp-adapter/node_modules/` (left from aborted install).
+  - Retired `docs/FEATURE_PLAN.md` to `local/retired_plans/`.
+- **MCP Adapter Integration**:
+  - Vendored `pi-mcp-adapter` v2.8.0 into `extensions/pi-mcp-adapter/`
+  - Preserved original layout: 30+ TypeScript files at root, `__tests__/`, `examples/`, `cli.js`, static assets
+  - Subpackage manifest: `extensions/pi-mcp-adapter/package.json` with `pi.extensions: ["./index.ts"]`
+  - Retained upstream `.gitignore`, `tsconfig.json`, `vitest.config.ts` (pi loads via jiti, not tsc)
+  - Original copy kept as reference in `upstream_extensions/pi-mcp-adapter/` (gitignored)
+  - Updated root `README.md` with MCP Adapter section and commands reference
+
 ## 2026-05-28
 - **Larger Image Emotes**:
   - Added `imageSize` config field to pi-emote for independent image/text grid sizing.
