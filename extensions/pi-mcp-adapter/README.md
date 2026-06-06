@@ -21,10 +21,11 @@ But the MCP ecosystem has useful stuff - databases, browsers, APIs. This adapter
 This extension is vendored inside **[Jarod's Pi Extensions](../../README.md)** and is installed by the parent package. From the repository root:
 
 ```bash
+npm install
 pi install .
 ```
 
-Then restart pi or run `/reload` if pi is already running.
+`npm install` installs this package's runtime dependencies for local path installs. Then restart pi or run `/reload` if pi is already running.
 
 For standalone upstream installation outside this repo, see [nicobailon/pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter).
 

@@ -597,7 +597,7 @@ function createFishWebSocket(apiKey: string, model: string, onMessage: (payload:
 			);
 		});
 		socket.on("data", (chunk) => {
-			buffer = Buffer.concat([buffer, chunk]);
+			buffer = Buffer.concat([buffer, typeof chunk === "string" ? Buffer.from(chunk) : chunk]);
 			if (!handshakeDone) {
 				const headerEnd = buffer.indexOf("\r\n\r\n");
 				if (headerEnd === -1) return;
@@ -852,7 +852,7 @@ function createVllmOmniWebSocket(
 		});
 
 		socket.on("data", (chunk) => {
-			buffer = Buffer.concat([buffer, chunk]);
+			buffer = Buffer.concat([buffer, typeof chunk === "string" ? Buffer.from(chunk) : chunk]);
 			if (!handshakeDone) {
 				const headerEnd = buffer.indexOf("\r\n\r\n");
 				if (headerEnd === -1) return;
@@ -1186,6 +1186,105 @@ function joinModelApiUrl(baseUrl: string, path: string): string {
 	return `${base}${suffix}`;
 }
 
+function joinCodexApiUrl(baseUrl: string): string {
+	const base = baseUrl.trim().replace(/\/+$/, "");
+	if (base.endsWith("/codex/responses")) return base;
+	if (base.endsWith("/codex")) return `${base}/responses`;
+	return `${base}/codex/responses`;
+}
+
+function extractJwtAccountId(token: string): string {
+	try {
+		const [, payload] = token.split(".");
+		if (!payload) throw new Error("missing payload");
+		const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+		const json = Buffer.from(normalized, "base64").toString("utf-8");
+		const data = JSON.parse(json) as { "https://api.openai.com/auth"?: { chatgpt_account_id?: string } };
+		const accountId = data["https://api.openai.com/auth"]?.chatgpt_account_id;
+		if (!accountId) throw new Error("missing chatgpt_account_id");
+		return accountId;
+	} catch (error) {
+		throw new Error(`Failed to extract ChatGPT account ID from Codex auth token: ${formatError(error)}`);
+	}
+}
+
+type ResponseContentPart = { type?: string; text?: string };
+type ResponseOutputItem = { type?: string; role?: string; content?: ResponseContentPart[] };
+
+function extractResponsesText(data: Record<string, unknown>): string {
+	if (typeof data.output_text === "string") return data.output_text;
+	const output = data.output as ResponseOutputItem[] | undefined;
+	const assistantItems = output?.filter((item) => item.role === "assistant" || item.type === "message") ?? [];
+	return assistantItems
+		.flatMap((item) => item.content ?? [])
+		.filter((part) => part.type === "output_text" || part.type === "message_content" || part.type === "text")
+		.map((part) => part.text ?? "")
+		.join(" ")
+		.trim();
+}
+
+function htmlToShortDiagnostic(text: string): string {
+	return text
+		.replace(/<style[\s\S]*?<\/style>/gi, " ")
+		.replace(/<script[\s\S]*?<\/script>/gi, " ")
+		.replace(/<[^>]+>/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+async function summarizeCodexText(text: string, model: { id: string; baseUrl: string; headers?: Record<string, string> }, auth: { apiKey?: string; headers?: Record<string, string> }, summarizerPrompt: string, maxSummaryTokens: number): Promise<string> {
+	if (!auth.apiKey) throw new Error("No OpenAI Codex auth token available. Run /login openai-codex or choose a non-Codex summarizer model.");
+	const accountId = extractJwtAccountId(auth.apiKey);
+	const headers: Record<string, string> = {
+		...model.headers,
+		...auth.headers,
+		Authorization: `Bearer ${auth.apiKey}`,
+		"chatgpt-account-id": accountId,
+		originator: "pi",
+		"OpenAI-Beta": "responses=experimental",
+		accept: "text/event-stream",
+		"content-type": "application/json",
+		"User-Agent": `pi (${process.platform}; ${process.arch})`,
+	};
+	const body = JSON.stringify({
+		model: model.id,
+		store: false,
+		stream: true,
+		instructions: summarizerPrompt,
+		input: [{ role: "user", content: [{ type: "input_text", text }] }],
+		text: { verbosity: "low" },
+		max_output_tokens: maxSummaryTokens,
+	});
+	const response = await fetch(joinCodexApiUrl(model.baseUrl), {
+		method: "POST",
+		headers,
+		body,
+		signal: AbortSignal.timeout(30_000),
+	});
+	if (!response.ok) {
+		const errText = await response.text().catch(() => "");
+		const preview = errText.trim().startsWith("<") ? htmlToShortDiagnostic(errText) : errText.trim();
+		throw new Error(`Summarizer HTTP ${response.status}: ${preview.slice(0, 300)}`);
+	}
+	const raw = await response.text();
+	let deltaText = "";
+	let finalText = "";
+	for (const block of raw.split(/\n\n+/)) {
+		const dataText = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n").trim();
+		if (!dataText || dataText === "[DONE]") continue;
+		const event = JSON.parse(dataText) as Record<string, unknown>;
+		if (event.type === "error") throw new Error(`Codex summarizer error: ${String(event.message ?? event.code ?? dataText)}`);
+		if (typeof event.delta === "string") deltaText += event.delta;
+		const responsePayload = event.response;
+		if (responsePayload && typeof responsePayload === "object") {
+			finalText = extractResponsesText(responsePayload as Record<string, unknown>) || finalText;
+		}
+	}
+	const summary = (finalText || deltaText).trim();
+	if (!summary) throw new Error(`Codex summarizer returned empty response. Raw: ${raw.slice(0, 500)}`);
+	return summary;
+}
+
 /**
  * Send text to an LLM for summarization. Returns the summary string on success,
  * or null on failure (error is shown via ctx.ui.notify).
@@ -1231,7 +1330,16 @@ async function summarizeText(
 		"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
 		"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
 	].join(" ");
-	const maxSummaryTokens = Math.max(1024, model.maxTokens || 4096);
+	const maxSummaryTokens = 16384;
+
+	if (model.api === "openai-codex-responses") {
+		try {
+			return await summarizeCodexText(text, model, auth, summarizerPrompt, maxSummaryTokens);
+		} catch (error) {
+			notifyFailure(ctx, formatError(error));
+			return null;
+		}
+	}
 
 	const body = (() => {
 		const api = model.api;
@@ -1243,7 +1351,7 @@ async function summarizeText(
 				messages: [{ role: "user", content: text }],
 			});
 		}
-		if (api === "openai-responses" || api === "openai-codex-responses" || api === "azure-openai-responses") {
+		if (api === "openai-responses" || api === "azure-openai-responses") {
 			return JSON.stringify({
 				model: model.id,
 				input: [
@@ -1267,7 +1375,7 @@ async function summarizeText(
 	const url = (() => {
 		const api = model.api;
 		if (api === "anthropic-messages") return joinModelApiUrl(baseUrl, "/v1/messages");
-		if (api === "openai-responses" || api === "openai-codex-responses" || api === "azure-openai-responses") return joinModelApiUrl(baseUrl, "/v1/responses");
+		if (api === "openai-responses" || api === "azure-openai-responses") return joinModelApiUrl(baseUrl, "/v1/responses");
 		return joinModelApiUrl(baseUrl, "/v1/chat/completions");
 	})();
 
@@ -1292,18 +1400,8 @@ async function summarizeText(
 			const contentArr = (data.content as Array<{ type?: string; text?: string }>) ?? [];
 			return contentArr.filter((c) => c.type === "text").map((c) => c.text ?? "").join(" ");
 		}
-		if (model.api === "openai-responses" || model.api === "openai-codex-responses" || model.api === "azure-openai-responses") {
-			if (typeof data.output_text === "string") return data.output_text;
-			const output = data.output as Array<{
-				role?: string;
-				content?: Array<{ type?: string; text?: string }>;
-			}> | undefined;
-			const assistantMsg = output?.find((item) => item.role === "assistant");
-			return assistantMsg?.content
-				?.filter((part) => part.type === "message_content")
-				.map((part) => part.text ?? "")
-				.join(" ")
-				?? "";
+		if (model.api === "openai-responses" || model.api === "azure-openai-responses") {
+			return extractResponsesText(data);
 		}
 		const choice = (data.choices as Array<{ finish_reason?: string; message?: { content?: string; reasoning_content?: string } }>)?.[0];
 		const message = choice?.message;
@@ -1432,6 +1530,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	let mode = settings.mode ?? "off";
 	let currentAgentIsInteractive = false;
 	let nextAgentIsInteractive = false;
+	let forceNextAgentNotification = false;
 	const tts = new TtsQueue(() => settings);
 	tts.setEvents(pi.events);
 
@@ -1488,8 +1587,14 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		tts.enqueue(ttsText);
 	}
 
+	pi.events.on("notification:force-next", (data: unknown) => {
+		const source = typeof data === "object" && data !== null ? (data as { source?: unknown }).source : undefined;
+		if (source === "voice-input") forceNextAgentNotification = true;
+	});
+
 	pi.on("input", async (event) => {
-		nextAgentIsInteractive = event.source === "interactive";
+		nextAgentIsInteractive = event.source === "interactive" || forceNextAgentNotification;
+		forceNextAgentNotification = false;
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
@@ -1977,8 +2082,10 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 
 		// Status
 		if (id === "status") {
-			if (ctx) ctx.ui.notify(getStatus(settings), "info");
-			updateStatus(ctx, mode);
+			if (ctx) {
+				ctx.ui.notify(getStatus(settings), "info");
+				updateStatus(ctx, mode);
+			}
 			return;
 		}
 	}

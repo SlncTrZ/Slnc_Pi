@@ -41,7 +41,7 @@ export async function openMenu(
     const stack: MenuLevel[] = [root];
     let mode: "browse" | "input" = "browse";
     let inputBuffer = "";
-    let inputItem: MenuItem | null = null;
+    let inputItem: Extract<MenuItem, { type: "input" }> | null = null;
     let busy = false; // prevent key handling during async action
 
     const current = () => stack[stack.length - 1];

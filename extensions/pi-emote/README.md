@@ -33,10 +33,11 @@ Community-contributed emote sets.
 This extension is vendored inside **[Jarod's Pi Extensions](../../README.md)** and is installed by the parent package. From the repository root:
 
 ```bash
+npm install
 pi install .
 ```
 
-Then restart pi or run `/reload` if pi is already running.
+`npm install` installs this package's runtime dependencies for local path installs. Then restart pi or run `/reload` if pi is already running.
 
 For standalone upstream installation outside this repo, see [cgxeiji/pi-emote](https://github.com/cgxeiji/pi-emote).
 
@@ -102,6 +103,20 @@ $env:WT_SESSION
 | tool | Any other tool |
 | failure | `bash` tool execution error |
 | compact | Context compaction |
+
+## Voice Input Integration
+
+When the **voice-input** extension is also installed, pi-emote reacts to voice activity via `voice:state` events:
+
+- **`listening` / `wake` / `transcribing`** → `think` animation
+  - The avatar uses the thinking animation while you are speaking and during transcription (not the talk/speaking animation).
+
+- **Assistant workflow priority**
+  - While the assistant is actively working (thinking tokens, text response streaming, tool calls, or TTS playback), the assistant's own workflow states take priority over the voice listening state.
+  - This prevents the avatar from showing the voice/listening animation while the assistant is still processing your prompt.
+
+- **Restoration after assistant finishes**
+  - After `agent_end` (or `tts:end`), if voice input is still listening, the avatar automatically returns to the `think` (listening) animation.
 
 ## Config
 

@@ -292,7 +292,9 @@ export async function openMcpSetup(
           resolve({ configChanged });
         });
       },
-      { overlay: true, overlayOptions: { anchor: "center", width: 92 } },
+      // Full-screen modal (not overlay) to avoid TUI compositing conflicts with
+      // image-protocol widgets like pi-emote (Kitty/Sixel sequences corrupt overlay compositing).
+      { overlay: false },
     );
   });
 }
@@ -369,7 +371,9 @@ export async function openMcpPanel(
           resolve();
         }, { noticeLines });
       },
-      { overlay: true, overlayOptions: { anchor: "center", width: 82 } },
+      // Full-screen modal (not overlay) to avoid TUI compositing conflicts with
+      // image-protocol widgets like pi-emote (Kitty/Sixel sequences corrupt overlay compositing).
+      { overlay: false },
     );
   });
 
@@ -412,7 +416,9 @@ export async function openMcpAuthPanel(
           noticeLines: ["Select an OAuth MCP server and press Enter or ctrl+a to authenticate."],
         });
       },
-      { overlay: true, overlayOptions: { anchor: "center", width: 82 } },
+      // Full-screen modal (not overlay) to avoid TUI compositing conflicts with
+      // image-protocol widgets like pi-emote (Kitty/Sixel sequences corrupt overlay compositing).
+      { overlay: false },
     );
   });
 

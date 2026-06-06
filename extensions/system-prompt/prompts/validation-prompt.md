@@ -26,3 +26,8 @@ Apply a trust-but-verify workflow for coding and repository tasks.
 - Include a concise validation/evidence summary after implementation work.
 - Distinguish between verified behavior, partially verified behavior, and unverified assumptions.
 - If no validation was run, explicitly say so and explain why.
+
+## Python Usage
+
+- Always manage python using uv, including native uv commands like add, remove, sync, run, etc.
+- uv pip install should be used as a backup if uv add does not work, else, default to uv run.

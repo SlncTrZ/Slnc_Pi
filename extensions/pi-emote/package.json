@@ -18,6 +18,7 @@
     "tui"
   ],
   "files": [
+    "index.ts",
     "src",
     "emotes",
     "!emotes/_test",
@@ -27,7 +28,9 @@
     "LICENSE"
   ],
   "pi": {
-    "extensions": ["./src/index.ts"],
+    "extensions": [
+      "./index.ts"
+    ],
     "image": "https://raw.githubusercontent.com/cgxeiji/pi-emote/main/pi-emote-demo.gif"
   },
   "peerDependencies": {

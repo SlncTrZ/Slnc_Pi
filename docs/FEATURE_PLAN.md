@@ -1,107 +1,213 @@
-# FEATURE_PLAN.md — System Prompt Profile Extension
+# Temporary Feature Plan: Voice Input Extension
 
-> **TEMPORARY WORKING ARTIFACT** — for AI-to-AI coordination only while this feature is in progress.
-> It is not durable project documentation, must not be cited as canonical reference, and must not be used as a source for other docs.
-> Only the user may decide when this file can be retired or removed.
+> Temporary coordination artifact only.
+>
+> This file is for coordinating AI agents while the voice input extension is being planned and implemented. It is not durable project documentation, must not be cited as a canonical reference, and must not be used as a source for permanent docs. Only Jarod may decide when this file can be retired or removed.
 
 ## Feature Summary
 
-Add a standalone Pi extension that can append a selectable system-prompt profile to Pi's default prompt. The first profile is `validation-prompt`, focused on trust-but-verify behavior: inspect docs/source before assuming APIs, validate implemented changes with command output or test results, and clearly report unverified work.
+Add a new Pi extension that lets Jarod speak voice input, transcribes it locally with Voxtral, fills Pi's editor with transcript text, and can submit or stop by explicit voice command.
+
+Target model: `mistralai/Voxtral-Mini-4B-Realtime-2602`.
+
+Primary target environment:
+- Windows
+- NVIDIA GPU
+- Enough VRAM for Voxtral Mini Realtime, expected 16GB+
+- Isolated Python runtime managed outside the repository working tree where possible
 
 ## Confirmed Requirements
 
-1. The behavior applies only when this extension is installed/enabled.
-2. The extension's selected mode/profile persists across Pi restarts.
-3. The extension uses append-only prompt text; it does not replace Pi's default prompt.
-4. Prompt content lives in Markdown files and should not break the TypeScript/JavaScript extension code.
-5. `/system-prompt` opens a tree-style menu with only:
-   - `Default` — no prompt profile appended.
-   - `Custom` — choose from built-in profiles in this extension's own `prompts/` folder.
-6. Only one built-in custom profile is needed initially: `validation-prompt`.
-7. Profile discovery is limited to this extension's `prompts/` folder.
-8. The validation prompt should instruct the model to:
-   - run tests/validation after code changes when possible;
-   - use the repository `local/` folder for temporary test scripts when it needs scripts for validation;
-   - prefer repository documentation/source evidence over assumed function names, parameters, config keys, or CLI flags;
-   - summarize command output/test results as evidence;
-   - retry validation/fixes a few times when reasonable;
-   - report what remains untested/unverified when validation is blocked or incomplete.
-9. One validation behavior mode is enough; no strictness levels yet.
-10. Implement as its own extension directory under `extensions/system-prompt/`.
+- Transcript text should fill/append to the editor and should not auto-submit unless an explicit voice submit command is detected.
+- Support three listening modes:
+  - push-to-talk
+  - toggle listening
+  - always-listening with VAD
+- Target Windows + NVIDIA GPU first.
+- Python worker process is acceptable if isolated from Pi and non-blocking.
+- Prefer `uvx` as the worker launch path instead of creating a repository `.venv` or relying on global packages.
+- Keep locked development package versions in a `uv.lock` or equivalent lock artifact.
+- Do not build a mock backend first.
+- Do not support mid-response steering for the first version.
+- Add an option to auto-launch the worker before each Pi session.
+- Auto-launch must be non-blocking.
+- TypeScript should own microphone capture and stream audio to the worker over a local socket.
+- The worker should stream transcription results back as they arrive, and the extension should update the editor incrementally.
+- Use a single `/voice` command tree for actions, modes, config, and model download.
+- Add a `/voice` menu option to initiate model download.
+- Prefer native Python inference first; keep vLLM as a fallback backend if native realtime performance is not fast enough.
+- Keep the worker source inside `extensions/voice-input/` so the extension remains usable on other computers that install the parent package.
+- Transcription should append to editor text rather than replace it.
+- Explicit voice submit commands (for example `Emi send prompt` or `Okay, that's it`) should submit the editor and omit the command tail.
+- Explicit voice stop commands (for example `stop listening`) should stop voice capture without submitting.
+- Model downloads should use the normal Hugging Face cache.
+- Always-listening mode should require a wake phrase.
+- Wire voice/listening state into `pi-emote` so it can show a listening indicator/facial expression.
+- Implement all three modes in the first version.
 
-## Relevant Existing Files And Patterns
+## Current Repository Context
 
-| File | Role |
-|---|---|
-| `package.json` | Root pi package manifest discovers `./extensions`, `./skills`, and `./prompts`. |
-| `README.md` | Root repository overview and extension list. Should link the new extension once implemented. |
-| `docs/CODE_STANDARDS.md` | Requires TypeScript extensions, per-extension README, minimal startup side effects, and validation notes. |
-| `extensions/notification/package.json` | Simple extension package pattern with `pi.extensions: ["./index.ts"]`. |
-| `extensions/notification/menu.ts` | Reusable tree-menu implementation pattern for extension commands. |
-| Pi docs `docs/extensions.md` | Confirms `before_agent_start` can modify the system prompt and `event.systemPromptOptions` exposes prompt build inputs. |
+Relevant existing patterns:
 
-## Existing Behavior Relevant To This Feature
+- `extensions/notification/index.ts`
+  - Uses commands, flags, persisted settings, background work, Windows audio helpers, and UI notifications.
+- `extensions/system-prompt/index.ts`
+  - Simple settings and command/menu extension structure.
+- `extensions/pi-emote/index.ts`
+  - Uses session lifecycle and extension events.
+- Pi extension API docs show support for:
+  - `pi.registerCommand()`
+  - `pi.registerShortcut()`
+  - `pi.on("session_start")`
+  - `ctx.ui.setStatus()`
+  - `ctx.ui.setWidget()`
+  - `ctx.ui.setEditorText()`
+  - `pi.sendUserMessage()` for explicit voice submit commands and keyboard-submit parity in always-listening mode.
 
-Pi builds its default system prompt dynamically. Extensions can hook `before_agent_start` after a user prompt is submitted and return a replacement `systemPrompt`. For append-only behavior, this extension should return `event.systemPrompt + "\n\n" + selectedProfileContent` when custom mode is active.
+## Recommended Architecture Direction
 
-## Proposed Code Trace
+Do not run Voxtral model inference inside the TypeScript extension process. Instead, build a Pi extension that manages a separate local Python worker process. The TypeScript side owns microphone capture and streams PCM frames to the worker over a local socket, while the Python side owns model loading and inference.
 
-1. Pi loads this repository as a pi package via root `package.json`.
-2. Pi discovers `extensions/system-prompt/package.json` under `./extensions`.
-3. That package registers `./index.ts` as an extension.
-4. `index.ts` startup:
-   - loads persisted settings from `join(getAgentDir(), "system-prompt.json")`;
-   - discovers Markdown profiles from `extensions/system-prompt/prompts/*.md`;
-   - registers `/system-prompt` command;
-   - registers `before_agent_start` hook.
-5. User runs `/system-prompt`:
-   - extension opens a tree menu;
-   - user selects `Default` or `Custom > validation-prompt`;
-   - selection is saved to `system-prompt.json`.
-6. On each agent turn:
-   - if mode is `default`, return `undefined` and leave Pi's prompt unchanged;
-   - if mode is `custom` and a valid profile is selected, read/use the Markdown content and return an appended `systemPrompt`.
+Rationale:
+- Pi extensions execute in the Pi Node process; loading a 4B realtime model there is not practical.
+- Node-native inference for this model would likely require fragile native bindings.
+- A worker process isolates GPU/CUDA/Python failures from Pi.
+- TypeScript-owned mic capture keeps the Pi UX/control plane centralized if audio capture dependencies are manageable on Windows.
+- The Pi extension can still provide integrated UX by managing worker launch, commands, shortcuts, status, transcript preview, and editor insertion.
 
-## Proposed Files
+## Proposed Components
 
 ```text
-extensions/system-prompt/
-├── README.md
-├── index.ts
-├── menu.ts                # optional copy/adaptation of existing tree menu, unless shared utility is introduced
+extensions/voice-input/
 ├── package.json
-└── prompts/
-    └── validation-prompt.md
+├── README.md
+├── index.ts             # Pi extension entrypoint
+├── settings.ts          # persisted settings under Pi agent dir
+├── worker-client.ts     # worker process and socket protocol client
+├── audio-capture.ts     # ffmpeg microphone capture
+└── menu.ts              # interactive tree menu
+
+extensions/voice-input/worker/
+├── pyproject.toml
+├── uv.lock
+└── voice_worker.py      # Voxtral/VAD/model inference worker
 ```
+
+Worker source should live under `extensions/voice-input/worker/` so the extension is usable on other computers that install the parent package. Temporary experiments or validation scripts may still live under `local/`.
+
+## High-Level Code Trace
+
+### Session startup with auto-launch enabled
+
+```text
+Pi starts/reloads
+  -> extensions/voice-input/index.ts default export runs
+  -> load settings from ~/.pi/agent/voice-input.json
+  -> register /voice command and shortcuts
+  -> pi.on("session_start") fires
+    -> if autoLaunchWorker is true:
+      -> startWorkerNonBlocking()
+        -> spawn uvx/uv command in background
+        -> do not await model load on the Pi startup path
+        -> set status: Voice worker starting
+        -> connect when ready or show non-blocking error
+```
+
+### Push-to-talk
+
+```text
+User presses configured shortcut or runs `/voice listen` while `mode=push-to-talk`
+  -> extension starts local mic capture
+  -> extension streams PCM frames to worker over the local socket
+  -> worker performs VAD and native Voxtral streaming/inference
+  -> partial/final transcript events return over the socket
+  -> extension appends/updates editor text incrementally
+  -> voice submit/stop commands are handled when final text ends with a recognized command tail
+```
+
+### Toggle listening
+
+```text
+/voice toggle or shortcut
+  -> if idle: tell worker to listen continuously until stopped
+  -> if listening: tell worker to stop and finalize current utterance
+  -> final transcript is appended into the editor
+```
+
+### Always-listening with VAD and wake phrase
+
+```text
+/voice mode always
+  -> extension keeps mic capture active and streams audio frames
+  -> worker performs VAD and wake-phrase detection
+  -> before wake phrase: do not update editor
+  -> after wake phrase: stream partial/final transcript events
+  -> extension appends/updates voice text in the editor incrementally
+  -> extension emits voice/listening state events for pi-emote
+  -> explicit voice or keyboard submission resets always-listening mode back to the wake-phrase gate
+```
+
+## UX Commands To Consider
+
+Everything should live under one `/voice` command tree:
+
+- `/voice` opens a tree menu or shows status/help.
+- `/voice start-worker`
+- `/voice stop-worker`
+- `/voice restart-worker`
+- `/voice status`
+- `/voice mode push-to-talk|toggle|always`
+- `/voice listen`
+- `/voice stop`
+- `/voice health`
+- `/voice devices`
+- `/voice device <exact DirectShow audio device name>`
+- `/voice download-model` starts/downloads model artifacts to the Hugging Face cache through the worker
+
+Shortcut candidates based on current Pi defaults:
+- `ctrl+t` is already used for thinking toggle, so avoid it by default.
+- `ctrl+v` is clipboard/paste-image related, so avoid it by default.
+- Initial default: `f8` for starting/stopping listening. `ctrl+shift+v` was rejected because it conflicts with paste in common terminals.
+
+Shortcuts should be configurable in settings or via Pi keybinding configuration.
+
+## Worker Isolation Thoughts
+
+Preferred approach to explore:
+
+- Use `uvx` from the extension as specified by Jarod.
+- Keep a checked-in lock file for reproducible worker development dependencies.
+- Avoid creating `.venv` inside the repository by default.
+- Make worker command configurable for Jarod's machine if Voxtral setup requires a specialized command.
+- Add a model download action through `/voice download-model`.
+
+Resolved implementation direction: use an installable worker package under `extensions/voice-input/worker/` launched with `uvx --refresh --from <worker-dir> pi-voice-worker`, with dependencies locked in `uv.lock`.
+
+## Open Questions
+
+1. Whether native Transformers streaming is fast enough long term, or whether vLLM should be added as an alternate backend.
+2. Whether dedicated pi-emote listening frames should be added instead of mapping voice states to existing think/talk/idle states.
+3. Whether additional voice command phrases should be configured through settings rather than hard-coded patterns.
 
 ## Validation Strategy
 
-- Static/compile validation from repository root, likely `npx tsc --noEmit` if the repo TypeScript config covers the new extension.
-  - Result: full root `npx tsc --noEmit` is currently blocked by pre-existing `pi-mcp-adapter` TypeScript/test dependency issues and missing local Pi peer dependency declarations.
-  - Result: targeted validation for `extensions/system-prompt/**/*.ts` passed using a temporary local tsconfig with paths to the globally installed Pi type declarations.
-- Smoke validation with Pi:
-  - install/load from repository root via `pi install .` or equivalent local path;
-  - run `/reload`;
-  - run `/system-prompt`;
-  - select `Custom > validation-prompt`;
-  - ask a small code-change task and verify the prompt is appended by observing behavior or using exported/system-prompt display if available.
-- If runtime Pi validation cannot be completed by the agent, report it explicitly as unverified and provide the manual flow.
+Planned validation once implementation begins:
 
-## Resolved Questions
+- TypeScript/source validation for the extension entrypoint and settings/client modules.
+- Worker command smoke test from terminal on Windows with NVIDIA GPU.
+- Pi extension load smoke check with `pi install .` and `/reload`.
+- Manual Pi flow:
+  - start worker
+  - verify non-blocking status while loading
+  - manual listening capture
+  - partial/final transcript appears in editor
+  - voice submit and voice stop command tails are handled correctly
+  - stop worker cleanly
+- Always-listening/VAD smoke check confirms wake-phrase gating and post-submit gate reset.
 
-1. Tree menu code should be copied/adapted into the new extension for now.
-2. Profile Markdown should be loaded once at startup/reload; users should run `/reload` after editing prompt files during a session.
-3. Settings should store `mode` plus `profileId` using the filename stem, leaving room for future profile metadata.
-4. Command name is exactly `/system-prompt`.
+## Next Actions
 
-## Checklist
-
-- [x] Resolve open questions.
-- [x] Add `extensions/system-prompt/package.json`.
-- [x] Add `extensions/system-prompt/index.ts`.
-- [x] Add tree menu support.
-- [x] Add `extensions/system-prompt/prompts/validation-prompt.md`.
-- [x] Add `extensions/system-prompt/README.md`.
-- [x] Update root `README.md` extension table and structure.
-- [x] Validate TypeScript for the new extension with a targeted temporary `local/tsconfig.system-prompt.json` that maps Pi's globally installed type declarations: `npx tsc --noEmit -p local/tsconfig.system-prompt.json` passed.
-- [x] Record changes in `AI_CHANGELOG.md`.
+- Continue tuning native Transformers streaming latency.
+- Consider a vLLM backend if native streaming remains too slow.
+- Consider dedicated pi-emote listening frames.
+- Consider making voice submit/stop command phrases configurable.

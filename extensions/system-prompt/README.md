@@ -9,10 +9,11 @@ This extension is intentionally append-only: it keeps Pi's built-in tool, docs, 
 Install this parent repository from the repository root:
 
 ```bash
+npm install
 pi install .
 ```
 
-Then start pi, or run `/reload` if pi is already running.
+`npm install` installs this package's runtime dependencies for local path installs. Then start pi, or run `/reload` if pi is already running.
 
 ## Command
 
@@ -29,7 +30,7 @@ Custom
 ```
 
 - **Default**: leaves Pi's system prompt unchanged.
-- **Custom > Validation Prompt**: appends `prompts/validation-prompt.md` to Pi's default prompt.
+- **Custom > Validation Prompt**: appends `extensions/system-prompt/prompts/validation-prompt.md` to Pi's default prompt.
 
 Selections are persisted globally in:
 
@@ -45,7 +46,7 @@ Current profile:
 
 | Profile | File | Purpose |
 |---|---|---|
-| Validation Prompt | `prompts/validation-prompt.md` | Encourages trust-but-verify behavior: inspect source/docs before assuming APIs, run validation after changes when possible, use `local/` for temporary validation scripts, and clearly report evidence or unverified work. |
+| Validation Prompt | `extensions/system-prompt/prompts/validation-prompt.md` | Encourages trust-but-verify behavior: inspect source/docs before assuming APIs, run validation after changes when possible, use `local/` for temporary validation scripts, and clearly report evidence or unverified work. |
 
 If you edit or add files under `prompts/` while pi is running, run:
 

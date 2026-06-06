@@ -7,10 +7,11 @@ Enable audio notifications for assistant responses — beep, TTS speech, or both
 This extension is part of **[Jarod's Pi Extensions](../../README.md)** and is installed by the parent package. From the repository root:
 
 ```bash
+npm install
 pi install .
 ```
 
-Then restart pi or run `/reload` if pi is already running.
+`npm install` installs this package's runtime dependencies for local path installs. Then restart pi or run `/reload` if pi is already running.
 
 ## Quick Start
 

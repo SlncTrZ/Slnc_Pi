@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pi-voice-worker"
+version = "0.1.7"
+description = "Isolated Voxtral voice input worker for Jarod's Pi voice extension"
+requires-python = ">=3.11"
+dependencies = [
+  "accelerate>=1.0.0",
+  "huggingface-hub>=0.36.0",
+  "mistral-common>=1.8.0",
+  "numpy>=2.0.0",
+  "soundfile>=0.13.0",
+  "torch>=2.9.0",
+  "transformers>=5.2.0",
+]
+
+[project.scripts]
+pi-voice-worker = "voice_worker:main"
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.hatch.build.targets.wheel]
+only-include = ["voice_worker.py"]

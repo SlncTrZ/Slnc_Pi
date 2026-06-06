@@ -4,22 +4,22 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
 
-import type { EmoteState, ResolvedRenderer } from "./types.js";
-import type { Renderer } from "./renderer.js";
-import { log, setDebug } from "./log.js";
-import { loadLayeredConfig, saveUserDefaultEmoteSet, saveUserImageSize, saveUserAlwaysShow } from "./config.js";
-import { resolveEmoteSet, findEmoteSetDir, loadEmotesConfig, listEmoteSets } from "./emotes.js";
-import { openMenu, type MenuItem } from "./menu.js";
-import { KittyRenderer } from "./render_kitty.js";
-import { TmuxKittyRenderer } from "./render_tmux_kitty.js";
-import { TmuxKittyUnicodeRenderer } from "./render_tmux_kitty_unicode.js";
-import { ITermRenderer } from "./render_iterm.js";
-import { TmuxITermRenderer } from "./render_tmux_iterm.js";
-import { SixelRenderer } from "./render_sixel.js";
-import { AsciiRenderer } from "./render_ascii.js";
-import { Animator } from "./animator.js";
-import { createWidgetFactory } from "./widget.js";
-import { resolveRenderer } from "./terminal.js";
+import type { EmoteState, ResolvedRenderer } from "./src/types.js";
+import type { Renderer } from "./src/renderer.js";
+import { log, setDebug } from "./src/log.js";
+import { loadLayeredConfig, saveUserDefaultEmoteSet, saveUserImageSize, saveUserAlwaysShow } from "./src/config.js";
+import { resolveEmoteSet, findEmoteSetDir, loadEmotesConfig, listEmoteSets } from "./src/emotes.js";
+import { openMenu, type MenuItem } from "./src/menu.js";
+import { KittyRenderer } from "./src/render_kitty.js";
+import { TmuxKittyRenderer } from "./src/render_tmux_kitty.js";
+import { TmuxKittyUnicodeRenderer } from "./src/render_tmux_kitty_unicode.js";
+import { ITermRenderer } from "./src/render_iterm.js";
+import { TmuxITermRenderer } from "./src/render_tmux_iterm.js";
+import { SixelRenderer } from "./src/render_sixel.js";
+import { AsciiRenderer } from "./src/render_ascii.js";
+import { Animator } from "./src/animator.js";
+import { createWidgetFactory } from "./src/widget.js";
+import { resolveRenderer } from "./src/terminal.js";
 
 const IMAGE_STATES = ["hi", "idle", "think", "talk", "read", "write", "tool", "success", "failure", "compact"];
 
@@ -45,7 +45,7 @@ function toolNameToState(toolName: string): EmoteState {
 }
 
 /** Resolve imageSize from config — defaults to `size` when not set. */
-import type { Config } from "./types.js";
+import type { Config } from "./src/types.js";
 function resolveImageSize(config: Config): number {
   const v = config.imageSize;
   if (typeof v === "number" && v > 0) return v;
@@ -84,7 +84,7 @@ function createRendererFromResolved(resolved: ResolvedRenderer, imageSize: numbe
 
 export default function (pi: ExtensionAPI) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const extDir = dirname(__dirname);
+  const extDir = __dirname;
 
   let cwd = process.cwd();
   let { config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd);
@@ -92,6 +92,10 @@ export default function (pi: ExtensionAPI) {
 
   // TTS mode from notification extension — suppresses streaming talk
   let ttsModeEnabled = false;
+  let assistantWorkflowActive = false;
+  let ttsPlaybackActive = false;
+  let lastVoiceState: string | undefined;
+  let lastVoiceListening = false;
 
   if (!config.enabled) return;
 
@@ -114,13 +118,49 @@ export default function (pi: ExtensionAPI) {
   pi.events.on("tts:start", () => {
     if (!widgetActive) return;
     log("tts:start");
+    assistantWorkflowActive = true;
+    ttsPlaybackActive = true;
     animator.enterTtsTalk();
   });
   pi.events.on("tts:end", () => {
     if (!widgetActive) return;
     log("tts:end");
+    ttsPlaybackActive = false;
+    assistantWorkflowActive = false;
     animator.exitTtsTalk();
+    restoreVoiceStateIfAppropriate();
   });
+
+  // Voice input extension integration. Until dedicated listening frames exist,
+  // use the think animation for user voice activity so the avatar does not look
+  // like it is speaking while Jarod is dictating/transcribing.
+  pi.events.on("voice:state", (data: unknown) => {
+    if (!widgetActive) return;
+    const payload = data as { state?: string; listening?: boolean };
+    lastVoiceState = payload.state;
+    lastVoiceListening = Boolean(payload.listening);
+    log(`voice:state = ${lastVoiceState}, listening=${lastVoiceListening}`);
+    restoreVoiceStateIfAppropriate();
+  });
+
+  function assistantOwnsEmote(): boolean {
+    return assistantWorkflowActive || ttsPlaybackActive;
+  }
+
+  function voiceStateWantsThinking(): boolean {
+    return lastVoiceListening && (lastVoiceState === "listening" || lastVoiceState === "wake" || lastVoiceState === "transcribing");
+  }
+
+  function restoreVoiceStateIfAppropriate(): void {
+    if (!widgetActive || assistantOwnsEmote()) return;
+    if (voiceStateWantsThinking()) {
+      animator.transitionTo("think");
+      return;
+    }
+    if (lastVoiceState === "ready" || lastVoiceState === "stopped") {
+      animator.transitionTo("idle");
+    }
+  }
 
   function loadEmoteSet(setName: string) {
     currentEmoteSet = setName;
@@ -508,6 +548,7 @@ export default function (pi: ExtensionAPI) {
 
     const streamEvent = event.assistantMessageEvent;
     if (!streamEvent) return;
+    assistantWorkflowActive = true;
 
     if (streamEvent.type === "thinking_start" || streamEvent.type === "thinking_delta") {
       if (animator.currentState !== "think") {
@@ -542,15 +583,18 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("agent_end", async () => {
     if (!widgetActive) return;
+    assistantWorkflowActive = false;
     if (animator.currentState === "talk") {
       animator.endTalk();
     } else if (animator.currentState !== "idle" && animator.currentState !== "hi" && animator.currentState !== "compact") {
       animator.transitionTo("idle");
     }
+    restoreVoiceStateIfAppropriate();
   });
 
   pi.on("tool_execution_start", async (event) => {
     if (!widgetActive) return;
+    assistantWorkflowActive = true;
     animator.transitionTo(toolNameToState(event.toolName));
   });
 

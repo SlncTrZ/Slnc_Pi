@@ -1,5 +1,73 @@
 # AI Changelog
 
+## 2026-06-06
+- **Voice Input — New Session Wake Gate Fix**:
+  - Fixed stale always-listening state after `/new` by resetting the local wake gate and sending `reset_wake` when an active listening session is carried into a new Pi session.
+  - Updated the Python worker `reset_wake` control path to clear active streams and buffered speech so stale awake audio cannot flush into the new session.
+  - Added a TypeScript-side wake gate that ignores pre-wake transcripts only when they do not contain a configured wake phrase, and strips the wake phrase from accepted transcript text.
+- **Voice Input Documentation Update**:
+  - Updated `extensions/voice-input/README.md` to document always-mode pre-wake transcript ignoring, wake-phrase stripping, and `/new` wake-gate reset behavior.
+  - Verified the documented wake-gate behavior against `extensions/voice-input/index.ts` and `extensions/voice-input/worker/voice_worker.py`.
+- **Documentation Verification**:
+  - Inconsistency: Root `README.md` Repository Structure listed only `docs/CONFIG.md`; updated to also list `CODE_STANDARDS.md` and `AUTHOR_NOTES.md`.
+  - Inconsistency: `extensions/system-prompt/README.md` listed the Validation Prompt file as `prompts/validation-prompt.md` (relative to repo root) in two places (Profiles table and Command section); corrected to `extensions/system-prompt/prompts/validation-prompt.md` to match the actual path.
+  - Inconsistency: `extensions/voice-input/README.md` "Important fields" section was missing `ffmpegPath` and `appendSeparator` settings; added both.
+  - Inconsistency: `extensions/voice-input/README.md` did not document the default `mode` value; updated to note default is `toggle`.
+- **Documentation Update**:
+  - Added "Voice Input Integration" section to `extensions/pi-emote/README.md`, documenting the emote's voice state mapping (`think` animation for voice transcription), assistant workflow priority, and restoration after `agent_end`/`tts:end`.
+- **Voice Input — Natural Submit Phrases**:
+  - Added natural voice submit phrases: `send it`, `okay send it`, `submit it`, `that's it`, `okay that's it`.
+  - Added addressed-only ambiguous phrases: `Emi go ahead`, `Emmy run that`, `Emi use that`, `Emi send that` (standalone versions do not submit to avoid accidental submission).
+  - Added persistent "confirmation mode" in `toggle` and `always` modes: after each final VAD segment, the widget displays `confirmation mode: waiting for send phrase` and waits indefinitely until a submit phrase is spoken; normal speech during this state is appended without submitting.
+- **Voice Input — Worker Lifecycle**:
+  - Changed `session_shutdown` to stop only microphone capture/listening state instead of killing the Python worker.
+  - Added worker adoption on new session: if `autoLaunchWorker` is off, the extension attempts to adopt an already-running worker so the Voxtral model stays warm across `/new`.
+  - Added parent-process PID watchdog: the worker now receives `VOICE_INPUT_PARENT_PID` and shuts itself down automatically when the Pi process exits completely.
+- **Voice Input — Fork Crash Fix**:
+  - Wrapped `handleWorkerEvent` and `ctxRef?.ui.setStatus` in `try-catch` blocks to prevent stale `ctxRef` errors during session fork/shutdown from crashing Pi.
+- **Voice Input — Tail-Cutoff Fix**:
+  - Fixed trailing audio chunks being dropped from the live streaming path by feeding low-energy trailing audio into the stream during the VAD quiet window.
+- **Voice Input — Wake Phrase Stripping**:
+  - Reworked `match_wake_phrase` to strip pre-wake text and the wake phrase itself from the transcript, preventing pre-wake preamble from leaking into the editor.
+- **Voice Input — Emote Animation Fix**:
+  - Changed `voice:state = transcribing` in `pi-emote` from `talk` to `think` so the avatar uses the thinking animation while the user is dictating.
+  - Added assistant workflow priority in `pi-emote`: assistant states (thinking, talking, tools, TTS) override voice listening states; voice state is restored after `agent_end`/`tts:end`.
+- **Worker Package Version**:
+  - Bumped `pi-voice-worker` from `0.1.6` to `0.1.7` to invalidate `uvx` cache for the new watchdog code.
+
+## 2026-06-01
+- **Voice Input Extension**:
+  - Added `extensions/voice-input/` as a Pi extension with `/voice` tree menu, direct subcommands, and `f8` listening shortcut.
+  - Added non-blocking worker lifecycle management, optional session auto-launch, ffmpeg-based TypeScript microphone capture, and local socket streaming to an isolated Python worker.
+  - Added a uvx-launched Python worker package under `extensions/voice-input/worker/` with `pyproject.toml`, `uv.lock`, Hugging Face model download support, energy-based VAD, wake-phrase handling, and native Voxtral transcription path.
+  - Added voice state events and wired `pi-emote` to react to listening/transcribing states with existing think/talk indicators until dedicated listening emote frames are added.
+  - Changed the default voice shortcut from `ctrl+shift+v` to `f8` after `ctrl+shift+v` conflicted with terminal paste behavior.
+  - Added DirectShow audio device discovery/selection for Windows so the extension no longer relies on invalid `audio=default`; `/voice devices` lists devices and `/voice device <name>` persists a chosen microphone.
+  - Added capture-exit cleanup so failed microphone capture stops listening state and returns the emote/status state to ready instead of leaving the sprite stuck in listening/think state.
+  - Added worker health ping/pong support, `/voice health`, and health details in `/voice status` so socket connectivity, PID, model-loaded state, PyTorch/CUDA device, and worker listening state are explicit.
+  - Updated `/voice start-worker` and `/voice restart-worker` to clean stale Windows `pi-voice-worker` Python/uv/uvx processes, wait for a socket health check, then request model load.
+  - Changed the default worker launch command to include `uvx --refresh` and bumped the worker package version to avoid uvx reusing stale cached worker code during development.
+  - Routed the worker's `torch` dependency through the PyTorch CUDA 12.8 (`cu128`) wheel index for Windows/Linux Blackwell GPU support and added CUDA/device details to worker health output.
+  - Added persistent three-line voice feedback for active listening/rejection mode, input levels/rejections/transcription, and listening-server health.
+  - Added addressed voice submit commands such as `Emi send prompt` and `Emmy submit the message`, plus natural submit endings such as `Okay, that's it`; useful text before the command is kept, the command tail is omitted, and always-listening mode resets to the wake-phrase gate after submit.
+  - Added voice stop commands such as `stop`, `stop listening`, and `Emi stop listening` to stop listening without submitting.
+  - Updated keyboard prompt submission while voice input is active so `always` mode resets to the wake-phrase gate just like voice submission.
+  - Added interim transcription previews while speech is still active, first with buffered preview windows and then with a persistent Voxtral streaming session that feeds audio features through a queue-backed generator and emits `TextIteratorStreamer` partials before final VAD segment transcription.
+  - Added `extensions/voice-input/README.md` and updated the root README extension table/structure.
+- **README Install Instructions**:
+  - Updated the root install flow to run `npm install` before `pi install .` for cloned local checkouts.
+  - Clarified that local path installs need dependencies installed in the checkout before Pi loads the extensions.
+- **Documentation Verification**:
+  - Reconciled extension README install blocks with the root local-clone setup by adding `npm install` before `pi install .` where missing.
+  - Updated the voice-input README to match current behavior for worker startup/restart, always-mode gating, voice submit/stop commands, and persistent Voxtral streaming-session partials.
+  - Updated the temporary voice-input feature plan to reflect the implemented files, command set, voice submit/stop behavior, and remaining follow-up questions without treating it as durable documentation.
+  - Added `voice-input` as a local/custom extension in the root README upstream/source table.
+- **Notification TTS Fixes**:
+  - Restored notification TTS for voice-submitted prompts by having `voice-input` mark the next agent turn as notification-eligible before calling `pi.sendUserMessage()`.
+  - Made OpenAI Responses summarizer parsing accept `output_text`, `message_content`, and `text` content parts so shortened TTS no longer fails on valid Responses API payloads.
+  - Fixed the shortened-TTS summarizer path for `openai-codex` models by using the ChatGPT Codex `/codex/responses` endpoint, required Codex headers, and SSE parsing instead of the generic `/v1/responses` endpoint that returned a 403 HTML page.
+  - Capped summary generation requests to a small token budget instead of inheriting very large model max-token limits.
+
 ## 2026-05-31
 - **System Prompt Extension**:
   - Added `extensions/system-prompt/` as a standalone Pi extension with `/system-prompt` tree menu.

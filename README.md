@@ -2,7 +2,7 @@
 
 A collection of extensions for the [pi coding agent](https://github.com/badlogic/pi-mono/).
 
-Includes a notification system (beep / TTS), an animated pixel-art emote widget, and an MCP server adapter — all installable in one step.
+Includes a notification system (beep / TTS), voice input, an animated pixel-art emote widget, and an MCP server adapter — all installable in one step.
 
 ## Prerequisites
 
@@ -17,10 +17,11 @@ Includes a notification system (beep / TTS), an animated pixel-art emote widget,
 ```bash
 git clone https://github.com/JarodMica/jarods-pi-extensions.git
 cd jarods-pi-extensions
+npm install
 pi install .
 ```
 
-Then start pi (or run `/reload` if already running).
+`npm install` installs this package's runtime dependencies for local path installs. Then start pi (or run `/reload` if already running).
 
 ## Uninstall
 
@@ -33,6 +34,7 @@ pi remove .
 | Extension | Description | Docs |
 |-----------|-------------|------|
 | **[notification](extensions/notification/)** | Audio notifications — beep, TTS, or both (4 engine backends) | [README](extensions/notification/README.md) |
+| **[voice-input](extensions/voice-input/)** | Local voice input that streams microphone audio to a Voxtral worker, fills the editor, and supports voice submit commands | [README](extensions/voice-input/README.md) |
 | **[pi-emote](extensions/pi-emote/)** | Animated pixel-art avatar that reacts to agent activity | [README](extensions/pi-emote/README.md) |
 | **[pi-mcp-adapter](extensions/pi-mcp-adapter/)** | Connect to MCP servers via a single ~200-token proxy tool | [README](extensions/pi-mcp-adapter/README.md) |
 | **[system-prompt](extensions/system-prompt/)** | Select append-only system prompt profiles, including trust-but-verify validation behavior | [README](extensions/system-prompt/README.md) |
@@ -43,18 +45,21 @@ pi remove .
 jarods-pi-extensions/
 ├── extensions/
 │   ├── notification/     — Notification extension (beep / TTS)
+│   ├── voice-input/      — Local Voxtral voice input extension
 │   ├── pi-emote/         — Pixel-art emote widget (vendored from cgxeiji/pi-emote)
 │   ├── pi-mcp-adapter/   — MCP server adapter (vendored from nicobailon/pi-mcp-adapter)
 │   └── system-prompt/    — Append-only selectable system prompt profiles
 ├── skills/               — Skill directories (placeholder, add SKILL.md files)
 ├── prompts/              — Prompt templates (placeholder, add .md files)
 ├── docs/
-│   └── CONFIG.md         — Notification configuration reference
+│   ├── CONFIG.md         — Notification configuration reference
+│   ├── CODE_STANDARDS.md — Repository code and workflow standards
+│   └── AUTHOR_NOTES.md   — Author-facing documentation guidance
 ├── package.json          — Root package manifest (pi discovers extensions/skills/prompts)
 └── tsconfig.json         — TypeScript config
 ```
 
-The root `package.json` declares `pi.extensions`, `pi.skills`, and `pi.prompts` paths. Pi discovers extension subdirectories under `./extensions` and honors each subpackage's `pi.extensions` manifest, so `pi install .` is the single install command.
+The root `package.json` declares `pi.extensions`, `pi.skills`, and `pi.prompts` paths. Pi discovers extension subdirectories under `./extensions` and honors each subpackage's `pi.extensions` manifest. For a cloned local checkout, run `npm install` first so extension dependencies are available, then run `pi install .`.
 
 ## Adding Your Own Extensions, Skills, or Prompts
 
@@ -79,3 +84,4 @@ After adding content, run `/reload` inside pi to pick up the changes.
 | `pi-emote` | [cgxeiji/pi-emote](https://github.com/cgxeiji/pi-emote) |
 | `pi-mcp-adapter` | [nicobailon/pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) |
 | `notification` | Local / custom |
+| `voice-input` | Local / custom |
