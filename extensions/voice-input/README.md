@@ -1,8 +1,11 @@
 # Voice Input Extension
 
-Local voice input for Pi. The extension captures microphone audio, streams PCM audio to an isolated Python worker, transcribes with Voxtral, appends transcript text into Pi's editor, and can submit the editor with an explicit voice command.
+Local voice input for Pi. The extension captures microphone audio, streams PCM audio to a transcription worker, appends transcript text into Pi's editor, and can submit the editor with an explicit voice command.
 
-Target model: [`mistralai/Voxtral-Mini-4B-Realtime-2602`](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602).
+Supported worker protocols:
+
+- `tcp-jsonl` (default): bundled uv-launched Python worker using [`mistralai/Voxtral-Mini-4B-Realtime-2602`](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602).
+- `websocket`: external NeMo/Nemotron cache-aware ASR server, verified with [`nvidia/nemotron-3.5-asr-streaming-0.6b`](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b) at `ws://127.0.0.1:8765/ws`.
 
 ## Install
 
@@ -19,9 +22,10 @@ Then restart pi or run `/reload` if pi is already running.
 
 - Windows + NVIDIA GPU is the first supported target.
 - `uvx` available on PATH.
-- Hugging Face access to `mistralai/Voxtral-Mini-4B-Realtime-2602`.
+- Hugging Face access to `mistralai/Voxtral-Mini-4B-Realtime-2602` for the bundled Voxtral worker, or a running local NeMo/Nemotron-compatible WebSocket ASR server for `workerProtocol=websocket`.
 - Microphone capture uses `ffmpeg-static` by default and streams 16 kHz mono PCM audio.
-- Voxtral native inference runs in the Python worker with dependencies locked under `worker/uv.lock`.
+- The worker/client uses an RMS voice activity threshold of `50` for speech detection.
+- Voxtral native inference runs in the bundled Python worker with dependencies locked under `worker/uv.lock`.
 - PyTorch is resolved from the CUDA 12.8 PyTorch wheel index (`https://download.pytorch.org/whl/cu128`) on Windows/Linux for Blackwell GPU support.
 
 ## Command
@@ -47,6 +51,9 @@ Useful direct commands:
 /voice mode push-to-talk
 /voice mode toggle
 /voice mode always
+/voice protocol tcp-jsonl
+/voice protocol websocket
+/voice websocket-url ws://127.0.0.1:8765/ws
 /voice auto-launch on
 /voice auto-launch off
 /voice download-model
@@ -66,13 +73,15 @@ Starts or stops listening using the configured `/voice mode`. `ctrl+shift+v` is 
 |---|---|
 | `push-to-talk` | Starts a manual listening session from the shortcut/menu and transcribes accepted speech until stopped with `f8`, `/voice stop`, or a stop phrase. |
 | `toggle` | Shortcut/menu toggles listening on and off and transcribes accepted speech. |
-| `always` | Keeps listening active, but stays in rejection mode until a wake phrase is detected. Speech heard before the wake phrase is ignored; if the transcript contains a configured wake phrase, the wake phrase is stripped and only the remaining text is appended. After voice or keyboard submission, it resets to the wake-phrase gate. |
+| `always` | Keeps listening active, but stays in rejection mode until a wake phrase is detected. Speech heard before the wake phrase is ignored; if the transcript contains a configured wake phrase or common transcription variant such as `hey amy`, the wake phrase is stripped and only the remaining text is appended. After voice or keyboard submission, it resets to the wake-phrase gate. |
 
 Default wake phrases include:
 
 ```text
 hey emi, hey emy, hey emilia, hey emmy, emi, emy, emilia, emmy
 ```
+
+Wake matching also tolerates common ASR spelling variants for these names, such as `amy` for `emi`/`emmy` and `amelia` for `emilia`.
 
 ## Listening Feedback
 
@@ -155,17 +164,32 @@ Important fields:
 - `wakePhrases`: phrases accepted by always-listening mode.
 - `sampleRate`: microphone sample rate sent to the worker; default `16000`.
 - `audioDevice`: Windows DirectShow audio device name. If unset, the extension auto-selects the first device containing `Microphone`, otherwise the first audio device.
-- `workerHost` / `workerPort`: local worker socket endpoint.
-- `workerCommand`: optional command override. Defaults to `uvx --refresh --from <extension>/worker pi-voice-worker`.
+- `workerProtocol`: `tcp-jsonl` for the bundled worker, or `websocket` for an external NeMo/Nemotron ASR server.
+- `workerHost` / `workerPort`: local worker endpoint. In WebSocket mode these form `ws://<host>:<port><workerPath>` unless `websocketUrl` is set.
+- `workerPath`: WebSocket path, default `/ws`.
+- `websocketUrl`: full WebSocket URL override, for example `ws://127.0.0.1:8765/ws`.
+- `stripLanguageTags`: remove trailing model language tags such as `<en-US>` from transcripts; default `true`.
+- `workerCommand`: optional command override. Defaults to `uvx --refresh --from <extension>/worker pi-voice-worker` for `tcp-jsonl`; WebSocket mode normally expects an already-running external server unless this is configured.
 - `logPath`: worker log path; default `~/.pi/agent/voice-input/voice-worker.log`.
 - `captureArgs`: optional ffmpeg argument override for microphone capture.
 - `appendSeparator`: text inserted between appended transcript segments (default: space).
 
+## Local WebSocket Server Mode
+
+Set `/voice protocol websocket` to use a separately managed local ASR server instead of the bundled `pi-voice-worker` process. By default the extension expects:
+
+- Health check: `http://127.0.0.1:8765/health`
+- Utterance stream: `ws://127.0.0.1:8765/ws`
+
+The TypeScript extension still owns microphone capture, RMS/VAD segmentation, wake-gate handling, editor updates, and voice submit/stop commands. For each detected utterance it opens a WebSocket, sends raw PCM16 LE binary frames, sends `{ "type": "end" }` when trailing silence closes the segment, and consumes JSON `{ "partial": "..." }`, `{ "final": "..." }`, or `{ "error": "..." }` messages from the server.
+
+In this mode `/voice start-worker` only auto-launches a process when `workerCommand` is configured. Otherwise, start the local ASR server yourself and use `/voice health` or `/voice status` to verify the HTTP health endpoint. `/voice download-model` reports that model download is managed by the external server startup.
+
 ## Worker Health And Cleanup
 
-`/voice status` and `/voice health` ping the worker socket and report the worker PID, whether the model is loaded, PyTorch version, CUDA availability/device, and whether the worker thinks it is listening.
+`/voice status` and `/voice health` ping the worker socket or WebSocket-mode health endpoint and report the worker PID when available, whether the model is loaded, PyTorch version when reported, CUDA availability/device when reported, and whether the worker/server thinks it is listening.
 
-When `autoLaunchWorker` is off, starting a new Pi chat/session does not launch a worker. If a manually started worker is already running, the extension adopts that existing worker on the new session so the loaded Voxtral model stays warm across `/new`.
+When `autoLaunchWorker` is off, starting a new Pi chat/session does not launch a worker. If a manually started worker is already running, the extension adopts that existing worker on the new session so the loaded model stays warm across `/new`. In WebSocket mode, adoption is a `/health` check against the external NeMo server.
 
 Workers launched by the extension receive Pi's process ID and run a parent-process watchdog. If Pi exits completely, the worker shuts itself down automatically; `/new` does not trigger this because the Pi process is still alive.
 
@@ -189,6 +213,8 @@ The extension emits `voice:state` events through Pi's extension event bus. `pi-e
 
 This extension intentionally keeps model inference outside Pi's Node process. The TypeScript extension handles Pi UX and audio streaming; the Python worker handles Voxtral loading and transcription.
 
-The worker uses a persistent Voxtral streaming session while speech is active. Audio frames are converted into streaming model features and fed through a queue-backed generator, while `TextIteratorStreamer` emits partial transcript updates before the VAD segment closes. A final transcript is emitted when the speech segment closes or listening stops.
+In `tcp-jsonl` mode, the worker uses a persistent Voxtral streaming session while speech is active. Audio frames are converted into streaming model features and fed through a queue-backed generator, while `TextIteratorStreamer` emits partial transcript updates before the VAD segment closes. A final transcript is emitted when the speech segment closes or listening stops.
+
+In `websocket` mode, the TypeScript client performs the same RMS/VAD segmentation and opens one WebSocket utterance per detected speech segment. It sends raw PCM16 LE binary frames to `/ws`, sends `{"type":"end"}` after the VAD trailing-silence window, and maps server `partial`/`final`/`error` JSON messages into the same Pi editor flow. This mode is intended for an externally managed local NeMo/Nemotron-compatible server.
 
 The older buffered segment transcription path remains as a fallback for cases where streaming is gated or unavailable. vLLM may still be added as an alternate backend if native Transformers streaming is not fast enough.

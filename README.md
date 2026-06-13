@@ -34,7 +34,7 @@ pi remove .
 | Extension | Description | Docs |
 |-----------|-------------|------|
 | **[notification](extensions/notification/)** | Audio notifications — beep, TTS, or both (4 engine backends) | [README](extensions/notification/README.md) |
-| **[voice-input](extensions/voice-input/)** | Local voice input that streams microphone audio to a Voxtral worker, fills the editor, and supports voice submit commands | [README](extensions/voice-input/README.md) |
+| **[voice-input](extensions/voice-input/)** | Local voice input that streams microphone audio to either the bundled Voxtral worker or a local WebSocket ASR server, fills the editor, and supports voice submit commands | [README](extensions/voice-input/README.md) |
 | **[pi-emote](extensions/pi-emote/)** | Animated pixel-art avatar that reacts to agent activity | [README](extensions/pi-emote/README.md) |
 | **[pi-mcp-adapter](extensions/pi-mcp-adapter/)** | Connect to MCP servers via a single ~200-token proxy tool | [README](extensions/pi-mcp-adapter/README.md) |
 | **[system-prompt](extensions/system-prompt/)** | Select append-only system prompt profiles, including trust-but-verify validation behavior | [README](extensions/system-prompt/README.md) |
@@ -45,7 +45,7 @@ pi remove .
 jarods-pi-extensions/
 ├── extensions/
 │   ├── notification/     — Notification extension (beep / TTS)
-│   ├── voice-input/      — Local Voxtral voice input extension
+│   ├── voice-input/      — Local voice input extension (bundled Voxtral worker or WebSocket ASR server)
 │   ├── pi-emote/         — Pixel-art emote widget (vendored from cgxeiji/pi-emote)
 │   ├── pi-mcp-adapter/   — MCP server adapter (vendored from nicobailon/pi-mcp-adapter)
 │   └── system-prompt/    — Append-only selectable system prompt profiles

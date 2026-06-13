@@ -149,12 +149,14 @@ Use `/emote` inside pi to inspect or change the default face set:
 ```text
 /emote list
 /emote set aza_choi_nobg
+/emote import
 /emote image-size 32
 /emote always-show on
 ```
 
 - `/emote list` — show current settings and available emote sets
 - `/emote set <name>` — change the emote set (autocompletes)
+- `/emote import` — open a folder picker, choose a `.zip`, validate it, and import it into your user emote sets. Existing set names prompt before overwrite; importing does not switch the active set.
 - `/emote image-size <cols>` — change image sprite size (2–120 columns, applies immediately)
 - `/emote always-show on|off` — keep the sprite visible even on narrow terminals (overrides `hideBelow`)
 
@@ -300,20 +302,28 @@ Available render values for tmux: `"auto"`, `"kitty-unicode"`, `"kitty"`, `"iter
 
 ## Custom Emotes
 
-Emote sets live in `emotes/<set-name>/` with PNG frames per state:
+Emote sets live in `emotes/<set-name>/` with PNG frames per state. Importable zip files should contain one top-level set folder using the same layout:
+
+```
+my-avatar.zip
+└── my-avatar/
+```
+
+After import, the set is copied to `~/.pi/agent/extensions/pi-emote/emotes/<set-name>/` and appears in `/emote list` / `/emote set <name>`. If the set name already exists, pi-emote asks before replacing it. Importing a set does not automatically activate it.
 
 ```
 emotes/my-avatar/
+├── emotes.json          # optional frame hints for idle/think/talk
 ├── idle/*.png
 ├── think/*.png
 ├── talk/*.png
 ├── read/*.png
 ├── write/*.png
 ├── tool/*.png
-└── ...          # hi, failure, compact (success is reserved/unused)
+└── ...                  # hi, failure, compact (success is reserved/unused)
 ```
 
-Not all states are required. Missing ones just won't animate.
+Not all states are required. Missing ones just won't animate. PNG files must use lowercase `.png` extensions.
 
 ### Where to put them
 

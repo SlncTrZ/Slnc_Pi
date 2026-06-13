@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { openMenu, type MenuItem } from "./menu";
 import { AudioCapture, listWindowsAudioDevices } from "./audio-capture";
-import { loadSettings, saveSettings, type VoiceMode, type WorkerState } from "./settings";
+import { loadSettings, saveSettings, type VoiceMode, type WorkerProtocol, type WorkerState } from "./settings";
 import { VoiceWorkerClient, type WorkerEvent } from "./worker-client";
 
 export default function voiceInputExtension(pi: ExtensionAPI) {
@@ -104,6 +104,10 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
       workerPort: settings.workerPort,
       workerCommand: settings.workerCommand,
       logPath: settings.logPath,
+      workerProtocol: settings.workerProtocol,
+      workerPath: settings.workerPath,
+      websocketUrl: settings.websocketUrl,
+      stripLanguageTags: settings.stripLanguageTags,
       wakePhrases: settings.wakePhrases,
       sampleRate: settings.sampleRate,
     });
@@ -155,6 +159,26 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
         ctx.ui.notify(`[voice-input] Mode set to ${mode}`, "info");
         return;
       }
+      case "protocol": {
+        const workerProtocol = rest[0] as WorkerProtocol | undefined;
+        if (!workerProtocol || !["tcp-jsonl", "websocket"].includes(workerProtocol)) {
+          ctx.ui.notify("Usage: /voice protocol tcp-jsonl|websocket", "warning");
+          return;
+        }
+        persist({ ...settings, workerProtocol });
+        ctx.ui.notify(`[voice-input] Worker protocol set to ${workerProtocol}`, "info");
+        return;
+      }
+      case "websocket-url": {
+        const websocketUrl = rest.join(" ");
+        if (!websocketUrl || !websocketUrl.startsWith("ws")) {
+          ctx.ui.notify("Usage: /voice websocket-url ws://127.0.0.1:8765/ws", "warning");
+          return;
+        }
+        persist({ ...settings, websocketUrl, workerProtocol: "websocket" });
+        ctx.ui.notify(`[voice-input] WebSocket URL set to ${websocketUrl}`, "info");
+        return;
+      }
       case "auto-launch": {
         const value = rest[0];
         if (value !== "on" && value !== "off") {
@@ -197,6 +221,25 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
       },
       {
         type: "submenu",
+        id: "protocol",
+        label: `Worker protocol: ${settings.workerProtocol}`,
+        children: () => (["tcp-jsonl", "websocket"] as const).map((protocol) => ({
+          type: "action" as const,
+          id: `protocol:${protocol}`,
+          label: `${settings.workerProtocol === protocol ? "✓ " : ""}${protocol}`,
+        })),
+      },
+      {
+        type: "submenu",
+        id: "transcript",
+        label: `Language tags: ${settings.stripLanguageTags ? "stripped" : "kept"}`,
+        children: () => [
+          { type: "action", id: "langtags:strip", label: `${settings.stripLanguageTags ? "✓ " : ""}Strip language tags` },
+          { type: "action", id: "langtags:keep", label: `${!settings.stripLanguageTags ? "✓ " : ""}Keep language tags` },
+        ],
+      },
+      {
+        type: "submenu",
         id: "settings",
         label: "Settings",
         children: () => [
@@ -219,6 +262,9 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
     if (id === "listen") { await toggleListening(ctx); return; }
     if (id === "status") { await showStatus(ctx); return; }
     if (id.startsWith("mode:")) { persist({ ...settings, mode: id.slice(5) as VoiceMode }); return; }
+    if (id.startsWith("protocol:")) { persist({ ...settings, workerProtocol: id.slice("protocol:".length) as WorkerProtocol }); return; }
+    if (id === "langtags:strip") { persist({ ...settings, stripLanguageTags: true }); return; }
+    if (id === "langtags:keep") { persist({ ...settings, stripLanguageTags: false }); return; }
     if (id === "worker:start") { await startWorkerFreshAndLoad(ctx); return; }
     if (id === "worker:stop") { worker.stop(); setUiState("stopped"); return; }
     if (id === "worker:restart") { await startWorkerFreshAndLoad(ctx); return; }
@@ -470,6 +516,17 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
     return null;
   }
 
+  function wakeWordMatches(candidate: string, expected: string): boolean {
+    const aliases: Record<string, string[]> = {
+      hey: ["hey", "hay"],
+      emi: ["emi", "emy", "emmy", "amy"],
+      emy: ["emi", "emy", "emmy", "amy"],
+      emmy: ["emi", "emy", "emmy", "amy"],
+      emilia: ["emilia", "amelia"],
+    };
+    return (aliases[expected] ?? [expected]).includes(candidate);
+  }
+
   function matchWakePhrase(text: string, phrases: string[]): { phrase: string; remainder: string } | null {
     const tokens = Array.from(text.matchAll(/[a-zA-Z0-9]+/g), (match) => ({
       word: match[0].toLowerCase(),
@@ -484,7 +541,7 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
       const maxStart = Math.min(12, Math.max(0, tokens.length - phraseWords.length));
       for (let start = 0; start <= maxStart; start++) {
         const candidate = tokens.slice(start, start + phraseWords.length).map((token) => token.word);
-        if (candidate.length !== phraseWords.length || candidate.some((word, i) => word !== phraseWords[i])) continue;
+        if (candidate.length !== phraseWords.length || candidate.some((word, i) => !wakeWordMatches(word, phraseWords[i]))) continue;
         const phraseEnd = tokens[start + phraseWords.length - 1].end;
         const remainder = text.slice(phraseEnd).replace(/^[ \t\r\n,.!?;:\-—]+/, "").trim();
         return { phrase, remainder };
@@ -612,7 +669,7 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
   }
 
   async function showStatus(ctx: ExtensionCommandContext): Promise<void> {
-    const local = `mode=${settings.mode}, state=${state}, listening=${listening}, autoLaunch=${settings.autoLaunchWorker}, audioDevice=${settings.audioDevice || "auto"}, socket=${worker.isConnected()}, child=${worker.isProcessRunning()}`;
+    const local = `mode=${settings.mode}, protocol=${settings.workerProtocol}, endpoint=${settings.websocketUrl || `${settings.workerHost}:${settings.workerPort}${settings.workerProtocol === "websocket" ? settings.workerPath : ""}`}, state=${state}, listening=${listening}, autoLaunch=${settings.autoLaunchWorker}, audioDevice=${settings.audioDevice || "auto"}, socket=${worker.isConnected()}, child=${worker.isProcessRunning()}`;
     try {
       const health = await worker.ping(2000);
       const errorLine = health.lastError ? `\nlastError: ${health.lastError.slice(0, 1000)}` : "";

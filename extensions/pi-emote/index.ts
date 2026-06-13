@@ -1,14 +1,16 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
+import type { Dirent } from "node:fs";
 
 import type { EmoteState, ResolvedRenderer } from "./src/types.js";
 import type { Renderer } from "./src/renderer.js";
 import { log, setDebug } from "./src/log.js";
 import { loadLayeredConfig, saveUserDefaultEmoteSet, saveUserImageSize, saveUserAlwaysShow } from "./src/config.js";
 import { resolveEmoteSet, findEmoteSetDir, loadEmotesConfig, listEmoteSets } from "./src/emotes.js";
+import { EmoteSetExistsError, importEmoteZip } from "./src/importer.js";
 import { openMenu, type MenuItem } from "./src/menu.js";
 import { KittyRenderer } from "./src/render_kitty.js";
 import { TmuxKittyRenderer } from "./src/render_tmux_kitty.js";
@@ -33,6 +35,72 @@ function hasImageFrames(setDir: string): boolean {
     }
   }
   return false;
+}
+
+function getHomeDir(): string {
+  return process.env.HOME ?? process.env.USERPROFILE ?? "";
+}
+
+async function pickZipFile(ctx: any, startDir: string): Promise<string | undefined> {
+  let dir = resolve(startDir || process.cwd());
+
+  while (true) {
+    let entries: Dirent[] = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+      ctx.ui.notify(`[pi-emote] Cannot read folder: ${dir}`, "warning");
+      dir = getHomeDir() || process.cwd();
+      continue;
+    }
+
+    const dirs = entries
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b));
+    const zips = entries
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".zip"))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b));
+
+    const options = [
+      "Cancel",
+      "../",
+      ...(dir !== resolve(getHomeDir() || dir) ? ["~/"] : []),
+      ...dirs.map((name) => `${name}/`),
+      ...zips,
+    ];
+
+    const choice = await ctx.ui.select(`Import emote zip: ${dir}`, options);
+    if (!choice || choice === "Cancel") return undefined;
+    if (choice === "../") {
+      dir = resolve(dir, "..");
+      continue;
+    }
+    if (choice === "~/") {
+      dir = resolve(getHomeDir() || dir);
+      continue;
+    }
+    if (choice.endsWith("/")) {
+      dir = resolve(dir, choice.slice(0, -1));
+      continue;
+    }
+    return resolve(dir, choice);
+  }
+}
+
+async function importEmoteZipWithOverwritePrompt(ctx: any, zipPath: string): Promise<ReturnType<typeof importEmoteZip> | null> {
+  try {
+    return importEmoteZip(zipPath);
+  } catch (error) {
+    if (!(error instanceof EmoteSetExistsError)) throw error;
+    const ok = await ctx.ui.confirm(
+      "Overwrite emote set?",
+      `The emote set "${error.setName}" already exists.\n\nOverwrite it with ${basename(zipPath)}?`,
+    );
+    if (!ok) return null;
+    return importEmoteZip(zipPath, { overwrite: true });
+  }
 }
 
 function toolNameToState(toolName: string): EmoteState {
@@ -228,6 +296,7 @@ export default function (pi: ExtensionAPI) {
     return [
       { value: "list", label: "list" },
       { value: "set ", label: "set <emote-set>" },
+      { value: "import", label: "import" },
       { value: "image-size ", label: "image-size <cols>" },
       { value: "always-show on", label: "always-show on" },
       { value: "always-show off", label: "always-show off" },
@@ -253,6 +322,7 @@ export default function (pi: ExtensionAPI) {
             label: setName === currentEmoteSet ? `▸ ${setName} (current)` : setName,
           })),
       },
+      { type: "action", id: "import-zip", label: "Import Emote Zip" },
       {
         type: "submenu",
         id: "display",
@@ -301,6 +371,28 @@ export default function (pi: ExtensionAPI) {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         ctx.ui.notify(`[pi-emote] Failed to set emote set: ${message}`, "error");
+      }
+      return;
+    }
+
+    // Import emote zip
+    if (id === "import-zip") {
+      try {
+        const zipPath = await pickZipFile(ctx, ctx.cwd ?? cwd);
+        if (!zipPath) return;
+        const result = await importEmoteZipWithOverwritePrompt(ctx, zipPath);
+        if (!result) {
+          ctx.ui.notify(`[pi-emote] Import cancelled.`, "info");
+          return;
+        }
+        const warningText = result.warnings.length > 0 ? `\nWarnings:\n- ${result.warnings.join("\n- ")}` : "";
+        ctx.ui.notify(
+          `[pi-emote] Imported "${result.setName}" (${result.fileCount} files). It is now available in Emote Set.${warningText}`,
+          result.warnings.length > 0 ? "warning" : "info",
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`[pi-emote] Failed to import emote zip: ${message}`, "error");
       }
       return;
     }
@@ -372,7 +464,7 @@ export default function (pi: ExtensionAPI) {
   let menuCtx: any = null;
 
   pi.registerCommand("emote", {
-    description: "Configure pi-emote (interactive menu) or use subcommands: set, image-size, always-show, list",
+    description: "Configure pi-emote (interactive menu) or use subcommands: import, set, image-size, always-show, list",
     getArgumentCompletions: autocompleteEmoteCommand,
     handler: async (args, ctx) => {
       // No arguments — open the interactive menu
@@ -393,6 +485,31 @@ export default function (pi: ExtensionAPI) {
           `[pi-emote] Emote set: ${currentEmoteSet}  ·  imageSize: ${imgSize}  ·  size: ${config.size}\nAvailable emote sets: ${sets.join(", ")}`,
           "info",
         );
+        return;
+      }
+
+      if (subcommand === "import") {
+        if (extra.length > 0) {
+          ctx.ui.notify(`[pi-emote] Usage: /emote import`, "warning");
+          return;
+        }
+        try {
+          const zipPath = setName ? resolve(ctx.cwd ?? cwd, setName) : await pickZipFile(ctx, ctx.cwd ?? cwd);
+          if (!zipPath) return;
+          const result = await importEmoteZipWithOverwritePrompt(ctx, zipPath);
+          if (!result) {
+            ctx.ui.notify(`[pi-emote] Import cancelled.`, "info");
+            return;
+          }
+          const warningText = result.warnings.length > 0 ? `\nWarnings:\n- ${result.warnings.join("\n- ")}` : "";
+          ctx.ui.notify(
+            `[pi-emote] Imported "${result.setName}" (${result.fileCount} files). It is now available in /emote set.${warningText}`,
+            result.warnings.length > 0 ? "warning" : "info",
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          ctx.ui.notify(`[pi-emote] Failed to import emote zip: ${message}`, "error");
+        }
         return;
       }
 
@@ -452,7 +569,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (subcommand !== "set" || !setName || extra.length > 0) {
-        ctx.ui.notify(`[pi-emote] Usage: /emote (menu), /emote list, /emote set <name>, /emote image-size <cols>, or /emote always-show on|off`, "warning");
+        ctx.ui.notify(`[pi-emote] Usage: /emote (menu), /emote list, /emote import, /emote set <name>, /emote image-size <cols>, or /emote always-show on|off`, "warning");
         return;
       }
 

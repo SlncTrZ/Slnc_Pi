@@ -23,7 +23,8 @@ SILENCE_TIMEOUT_SECONDS = 0.8
 MIN_SPEECH_SECONDS = 0.35
 MIN_INTERIM_SECONDS = 0.9
 INTERIM_TRANSCRIBE_SECONDS = 1.3
-ENERGY_THRESHOLD = 350.0
+ENERGY_THRESHOLD = 50.0
+PRE_ROLL_SECONDS = 0.5
 
 
 def log(message: str) -> None:
@@ -292,6 +293,7 @@ class SessionState:
     listening: bool = False
     awake: bool = False
     speech_buffer: bytearray = field(default_factory=bytearray)
+    pre_roll_buffer: bytearray = field(default_factory=bytearray)
     utterance_buffer: bytearray = field(default_factory=bytearray)
     last_voice_time: float = 0.0
     last_level_emit_time: float = 0.0
@@ -349,6 +351,7 @@ class VoiceHandler(socketserver.StreamRequestHandler):
             self.session.listening = True
             self.session.awake = self.session.mode != "always"
             self.session.speech_buffer.clear()
+            self.session.pre_roll_buffer.clear()
             self.session.utterance_buffer.clear()
             self.session.last_interim_time = 0.0
             self.close_stream(emit_final=False)
@@ -377,6 +380,7 @@ class VoiceHandler(socketserver.StreamRequestHandler):
         if msg_type == "reset_wake":
             self.close_stream(emit_final=False)
             self.session.speech_buffer.clear()
+            self.session.pre_roll_buffer.clear()
             self.session.utterance_buffer.clear()
             self.session.in_speech = False
             self.session.last_interim_time = 0.0
@@ -396,6 +400,9 @@ class VoiceHandler(socketserver.StreamRequestHandler):
             self.session.last_level_emit_time = now
             self.emit({"type": "audio_level", "energy": energy, "threshold": ENERGY_THRESHOLD, "inSpeech": self.session.in_speech})
         if energy >= ENERGY_THRESHOLD:
+            if not self.session.in_speech and self.session.pre_roll_buffer:
+                self.session.speech_buffer.extend(self.session.pre_roll_buffer)
+                self.session.pre_roll_buffer.clear()
             self.session.in_speech = True
             self.session.last_voice_time = now
             self.session.speech_buffer.extend(data)
@@ -414,6 +421,12 @@ class VoiceHandler(socketserver.StreamRequestHandler):
                 self.feed_stream(data)
             if now - self.session.last_voice_time >= SILENCE_TIMEOUT_SECONDS:
                 self.flush_segment(force=False)
+            return
+
+        self.session.pre_roll_buffer.extend(data)
+        max_pre_roll_bytes = int(PRE_ROLL_SECONDS * self.transcriber.sample_rate * 2)
+        if len(self.session.pre_roll_buffer) > max_pre_roll_bytes:
+            del self.session.pre_roll_buffer[:-max_pre_roll_bytes]
 
     def streaming_enabled(self) -> bool:
         return self.session.mode != "always" or self.session.awake
@@ -491,6 +504,7 @@ class VoiceHandler(socketserver.StreamRequestHandler):
                             self.emit({"type": "wake", "phrase": phrase})
                             text = remainder
                         else:
+                            self.emit({"type": "audio_rejected", "reason": "wake_not_found"})
                             continue
                     elif phrase:
                         text = remainder
@@ -545,6 +559,17 @@ def normalize_text(text: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", "", text.lower()).strip()
 
 
+def wake_word_matches(candidate: str, expected: str) -> bool:
+    aliases = {
+        "hey": {"hey", "hay"},
+        "emi": {"emi", "emy", "emmy", "amy"},
+        "emy": {"emi", "emy", "emmy", "amy"},
+        "emmy": {"emi", "emy", "emmy", "amy"},
+        "emilia": {"emilia", "amelia"},
+    }
+    return candidate in aliases.get(expected, {expected})
+
+
 def match_wake_phrase(text: str, phrases: list[str]) -> tuple[str | None, str]:
     tokens = [(match.group(0).lower(), match.start(), match.end()) for match in re.finditer(r"[a-zA-Z0-9]+", text)]
     if not tokens:
@@ -561,7 +586,7 @@ def match_wake_phrase(text: str, phrases: list[str]) -> tuple[str | None, str]:
         max_start = min(12, max(0, len(tokens) - phrase_len))
         for start in range(max_start + 1):
             candidate = [word for word, _, _ in tokens[start:start + phrase_len]]
-            if candidate != phrase_words:
+            if len(candidate) != phrase_len or any(not wake_word_matches(word, phrase_words[i]) for i, word in enumerate(candidate)):
                 continue
             phrase_end = tokens[start + phrase_len - 1][2]
             remainder = text[phrase_end:].lstrip(" \t\r\n,.!?;:-—")

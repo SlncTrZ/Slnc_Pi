@@ -33,6 +33,9 @@
     ],
     "image": "https://raw.githubusercontent.com/cgxeiji/pi-emote/main/pi-emote-demo.gif"
   },
+  "dependencies": {
+    "adm-zip": "^0.5.17"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*"

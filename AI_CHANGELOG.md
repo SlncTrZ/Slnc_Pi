@@ -1,12 +1,29 @@
 # AI Changelog
 
+## 2026-06-13
+- **Documentation Verification — Voice Input Local Server Mode**:
+  - Inconsistency: Root `README.md` described `voice-input` only as a Voxtral worker extension, while code also supports `workerProtocol=websocket` with a local ASR server at `ws://127.0.0.1:8765/ws` and health checks at `http://127.0.0.1:8765/health`.
+  - Documentation updates applied: Updated root `README.md` and `extensions/voice-input/README.md` to document the local WebSocket ASR server mode, endpoint expectations, ownership split, message protocol, and health/startup behavior.
+
+## 2026-06-12
+- **pi-emote — Import Emote Zip**:
+  - Added an `/emote import` flow and interactive menu option that opens a folder-picker style selector for `.zip` emote sets.
+  - Added zip validation and extraction into the user emote directory, with an overwrite confirmation when the imported set name already exists.
+  - Added `adm-zip` as the zip reader dependency and documented the import command, zip layout, overwrite behavior, and activation flow in `extensions/pi-emote/README.md`.
+  - Validation: targeted TypeScript check for pi-emote passed; importer smoke test imported a 19-file emote zip, detected existing-set conflict, and overwrote when requested. Full repository `tsc` remains blocked by pre-existing unrelated `pi-mcp-adapter` test/type issues.
+
 ## 2026-06-06
 - **Voice Input — New Session Wake Gate Fix**:
   - Fixed stale always-listening state after `/new` by resetting the local wake gate and sending `reset_wake` when an active listening session is carried into a new Pi session.
   - Updated the Python worker `reset_wake` control path to clear active streams and buffered speech so stale awake audio cannot flush into the new session.
   - Added a TypeScript-side wake gate that ignores pre-wake transcripts only when they do not contain a configured wake phrase, and strips the wake phrase from accepted transcript text.
+- **Voice Input Wake Phrase Robustness**:
+  - Lowered the worker RMS speech threshold from `350` to `50` for quieter Focusrite/microphone input.
+  - Added a short Python worker pre-roll buffer so the start of a wake phrase is less likely to be clipped when the first syllables are quiet.
+  - Added wake-word alias matching for common ASR variants such as `hey amy` / `amelia` while preserving the configured wake phrases.
+  - Added worker feedback for pre-wake transcriptions that do not contain a recognized wake phrase.
 - **Voice Input Documentation Update**:
-  - Updated `extensions/voice-input/README.md` to document always-mode pre-wake transcript ignoring, wake-phrase stripping, and `/new` wake-gate reset behavior.
+  - Updated `extensions/voice-input/README.md` to document always-mode pre-wake transcript ignoring, wake-phrase stripping, `/new` wake-gate reset behavior, and common wake transcription variants.
   - Verified the documented wake-gate behavior against `extensions/voice-input/index.ts` and `extensions/voice-input/worker/voice_worker.py`.
 - **Documentation Verification**:
   - Inconsistency: Root `README.md` Repository Structure listed only `docs/CONFIG.md`; updated to also list `CODE_STANDARDS.md` and `AUTHOR_NOTES.md`.

@@ -64,7 +64,7 @@ export async function openMenu(
     function render(): string[] {
       const lines: string[] = [];
 
-      if (mode === "input" && inputItem) {
+      if (mode === "input" && inputItem?.type === "input") {
         lines.push(theme.fg("accent", theme.bold(current().title)));
         lines.push("");
         lines.push(theme.fg("muted", inputItem.prompt));
@@ -161,7 +161,7 @@ export async function openMenu(
         if (busy) return;
 
         // ── Input mode ─────────────────────────────────────
-        if (mode === "input" && inputItem) {
+        if (mode === "input" && inputItem?.type === "input") {
           if (matchesKey(data, "enter")) {
             const value = inputBuffer.trim();
             const id = inputItem.id;
