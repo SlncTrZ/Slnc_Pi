@@ -2,6 +2,7 @@ import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tu
 import type { ImportKind } from "./types.ts";
 import type { ConfigWritePreview, McpDiscoverySummary } from "./config.ts";
 import type { McpOnboardingState } from "./onboarding-state.ts";
+import { getProjectConfigDirName } from "./agent-dir.ts";
 
 interface SetupTheme {
   border: string;
@@ -482,7 +483,7 @@ export class McpSetupPanel {
           "1. ~/.config/mcp/mcp.json",
           "2. <Pi agent dir>/mcp.json",
           "3. .mcp.json",
-          "4. .pi/mcp.json",
+          `4. ${getProjectConfigDirName()}/mcp.json`,
           "Pi writes compatibility imports and adapter-only overrides to Pi-owned files.",
         ]);
       case "open-paths":

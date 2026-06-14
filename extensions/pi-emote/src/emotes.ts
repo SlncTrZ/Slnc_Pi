@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { EmoteState, EmoteMapping, EmotesConfig, FrameSet } from "./types.js";
+import { getProjectExtensionDir, getUserExtensionDir } from "./paths.js";
 
 // --- Glob Matching ---
 
@@ -31,13 +32,11 @@ export function resolveEmoteSet(modelId: string, emotes: EmoteMapping[]): string
 // --- Emote Set Location ---
 
 export function findEmoteSetDir(setName: string, extDir: string, cwd: string): string {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
-
   // Priority: project → user → extension → fallback to default
-  const projectDir = join(cwd, ".pi", "extensions", "pi-emote", "emotes", setName);
+  const projectDir = join(getProjectExtensionDir(cwd), "emotes", setName);
   if (existsSync(projectDir)) return projectDir;
 
-  const userDir = join(homeDir, ".pi", "agent", "extensions", "pi-emote", "emotes", setName);
+  const userDir = join(getUserExtensionDir(), "emotes", setName);
   if (existsSync(userDir)) return userDir;
 
   const extSetDir = join(extDir, "emotes", setName);
@@ -62,11 +61,10 @@ function listSetDirs(dir: string): string[] {
 }
 
 export function listEmoteSets(extDir: string, cwd: string): string[] {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const dirs = [
     join(extDir, "emotes"),
-    join(homeDir, ".pi", "agent", "extensions", "pi-emote", "emotes"),
-    join(cwd, ".pi", "extensions", "pi-emote", "emotes"),
+    join(getUserExtensionDir(), "emotes"),
+    join(getProjectExtensionDir(cwd), "emotes"),
   ];
 
   return [...new Set(dirs.flatMap(listSetDirs))].sort();

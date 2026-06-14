@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config, EmoteMapping, TerminalMapping } from "./types.js";
+import { getProjectExtensionDir, getUserExtensionDir } from "./paths.js";
 
 export interface ConfigResult {
   config: Config;
@@ -35,12 +36,8 @@ function loadJsonFile(path: string): any | null {
   }
 }
 
-function getHomeDir(): string {
-  return process.env.HOME ?? process.env.USERPROFILE ?? "";
-}
-
 export function getUserConfigPath(): string {
-  return join(getHomeDir(), ".pi", "agent", "extensions", "pi-emote", "config.json");
+  return join(getUserExtensionDir(), "config.json");
 }
 
 export function saveUserDefaultEmoteSet(setName: string): void {
@@ -133,7 +130,7 @@ export function loadLayeredConfig(extDir: string, cwd: string): ConfigResult {
   const userConfig = loadJsonFile(getUserConfigPath());
 
   // Layer 3: Project config (highest priority)
-  const projectConfig = loadJsonFile(join(cwd, ".pi", "extensions", "pi-emote", "config.json"));
+  const projectConfig = loadJsonFile(join(getProjectExtensionDir(cwd), "config.json"));
 
   // Deep merge in priority order
   let merged = DEFAULTS;

@@ -1,6 +1,7 @@
 import AdmZip from "adm-zip";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, normalize, parse, sep } from "node:path";
+import { basename, dirname, join, normalize, parse, sep } from "node:path";
+import { getUserExtensionDir } from "./paths.js";
 
 const IMAGE_STATES = new Set(["hi", "idle", "think", "talk", "read", "write", "tool", "success", "failure", "compact"]);
 
@@ -18,12 +19,8 @@ export class EmoteSetExistsError extends Error {
   }
 }
 
-function getHomeDir(): string {
-  return process.env.HOME ?? process.env.USERPROFILE ?? "";
-}
-
 export function getUserEmotesDir(): string {
-  return join(getHomeDir(), ".pi", "agent", "extensions", "pi-emote", "emotes");
+  return join(getUserExtensionDir(), "emotes");
 }
 
 function sanitizeSetName(name: string): string {
