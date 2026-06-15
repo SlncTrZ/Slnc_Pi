@@ -1,0 +1,24 @@
+{
+  "idle": {
+    "default": "idle4.png",
+    "blink": [
+      "idle1.png",
+      "idle2.png"
+    ],
+    "blinkDuration": 300,
+    "expressions": [
+      "idle3.png",
+      "idle5.png",
+      "idle6.png"
+    ],
+    "expressionDuration": 1000
+  },
+  "talk": {
+    "weights": {
+      "talk1.png": 0.25,
+      "talk2.png": 0.25,
+      "talk3.png": 0.25,
+      "talk4.png": 0.25
+    }
+  }
+}

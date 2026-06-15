@@ -36,7 +36,17 @@ export interface ResolvedRenderer {
 }
 
 export interface EmotesConfig {
-  idle?: { default?: string; blink?: string };
+  idle?: {
+    default?: string;
+    /** Single frame or 2-frame blink sequence [open, closed] */
+    blink?: string | string[];
+    /** Duration (ms) to hold the closed/blink frame (default 150) */
+    blinkDuration?: number;
+    /** Extra expression frames shown randomly during idle */
+    expressions?: string[];
+    /** Duration (ms) to hold expression frames (default 1000) */
+    expressionDuration?: number;
+  };
   think?: { default?: string; hard?: string };
   talk?: { weights?: Record<string, number> };
 }

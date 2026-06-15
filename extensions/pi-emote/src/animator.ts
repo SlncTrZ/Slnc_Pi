@@ -23,6 +23,7 @@ export class Animator {
   // Timers
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
   private blinkTimer: ReturnType<typeof setTimeout> | null = null;
+  private expressionTimer: ReturnType<typeof setTimeout> | null = null;
   private talkTimer: ReturnType<typeof setInterval> | null = null;
   private cycleTimer: ReturnType<typeof setInterval> | null = null;
   private thinkTimer: ReturnType<typeof setTimeout> | null = null;
@@ -91,6 +92,7 @@ export class Animator {
     if (this.talkGapTimer) { clearTimeout(this.talkGapTimer); this.talkGapTimer = null; }
     if (this.talkDurationTimer) { clearTimeout(this.talkDurationTimer); this.talkDurationTimer = null; }
     if (this.thinkTimer) { clearTimeout(this.thinkTimer); this.thinkTimer = null; }
+    if (this.expressionTimer) { clearTimeout(this.expressionTimer); this.expressionTimer = null; }
   }
 
   private clearStateTimers() {
@@ -100,15 +102,16 @@ export class Animator {
     if (this.talkGapTimer) { clearTimeout(this.talkGapTimer); this.talkGapTimer = null; }
     if (this.talkDurationTimer) { clearTimeout(this.talkDurationTimer); this.talkDurationTimer = null; }
     if (this.thinkTimer) { clearTimeout(this.thinkTimer); this.thinkTimer = null; }
+    if (this.expressionTimer) { clearTimeout(this.expressionTimer); this.expressionTimer = null; }
   }
 
   // --- State transitions ---
 
   transitionTo(state: EmoteState) {
     this.clearStateTimers();
-    if (this.currentState === "idle" && this.blinkTimer) {
-      clearTimeout(this.blinkTimer);
-      this.blinkTimer = null;
+    if (this.currentState === "idle") {
+      if (this.blinkTimer) { clearTimeout(this.blinkTimer); this.blinkTimer = null; }
+      if (this.expressionTimer) { clearTimeout(this.expressionTimer); this.expressionTimer = null; }
     }
     this.currentState = state;
 
@@ -132,9 +135,14 @@ export class Animator {
   }
 
   enterIdle() {
-    const defaultFile = this.emotesConfig.idle?.default ?? "idle.png";
-    this.renderer.showFrame("idle", defaultFile);
+    const defaultFile = this.emotesConfig.idle?.default ?? null;
+    if (defaultFile && this.renderer.showFrame("idle", defaultFile)) {
+      // use configured default frame
+    } else {
+      this.renderer.showRandomFrame("idle");
+    }
     this.scheduleBlink();
+    this.scheduleExpression();
   }
 
   private scheduleBlink() {
@@ -146,28 +154,80 @@ export class Animator {
     }, delay);
   }
 
+  /**
+   * Execute blink animation.
+   * - If blink is a 2-element array [open, closed]: play sequence open→closed→default
+   * - If blink is a string: show that single frame then return to default
+   * - If blink is null: showRandomFrame
+   */
   private doBlink() {
-    const blinkFile = this.emotesConfig.idle?.blink ?? "idle_blink.png";
-    if (!this.renderer.showFrame("idle", blinkFile)) {
+    const blinkCfg = this.emotesConfig.idle?.blink ?? null;
+    const blinkDuration = this.emotesConfig.idle?.blinkDuration ?? 150;
+    const defaultFile = this.emotesConfig.idle?.default ?? null;
+
+    // Blink sequence: [open, closed]
+    if (Array.isArray(blinkCfg) && blinkCfg.length >= 2) {
+      const openFile = blinkCfg[0]!;
+      const closeFile = blinkCfg[1]!;
+      if (!this.renderer.showFrame("idle", openFile)) {
+        this.scheduleBlink();
+        return;
+      }
+      // Show closed frame after blinkDuration, then return to default
+      setTimeout(() => {
+        if (this.currentState !== "idle") return;
+        this.renderer.showFrame("idle", closeFile, true);
+        setTimeout(() => {
+          if (this.currentState !== "idle") return;
+          if (defaultFile) {
+            this.renderer.showFrame("idle", defaultFile, true);
+          } else {
+            this.renderer.showRandomFrame("idle", true);
+          }
+          this.scheduleBlink();
+        }, blinkDuration);
+      }, blinkDuration);
+      return;
+    }
+
+    // Single blink frame (backward compat)
+    const blinkFile = typeof blinkCfg === "string" ? blinkCfg : null;
+    let blinked = false;
+    if (blinkFile) {
+      blinked = this.renderer.showFrame("idle", blinkFile);
+    } else {
+      blinked = this.renderer.showRandomFrame("idle");
+    }
+    if (!blinked) {
       this.scheduleBlink();
       return;
     }
 
     const doubleBlink = Math.random() < 0.15;
-    const blinkDuration = 150;
-    const defaultFile = this.emotesConfig.idle?.default ?? "idle.png";
 
     setTimeout(() => {
       if (this.currentState !== "idle") return;
-      this.renderer.showFrame("idle", defaultFile, true);
+      if (defaultFile) {
+        this.renderer.showFrame("idle", defaultFile, true);
+      } else {
+        this.renderer.showRandomFrame("idle", true);
+      }
 
       if (doubleBlink) {
         setTimeout(() => {
           if (this.currentState !== "idle") return;
-          this.renderer.showFrame("idle", blinkFile, true);
+          if (blinkFile) {
+            this.renderer.showFrame("idle", blinkFile, true);
+          } else {
+            this.renderer.showRandomFrame("idle", true);
+          }
           setTimeout(() => {
             if (this.currentState !== "idle") return;
-            this.renderer.showFrame("idle", defaultFile, true);
+            if (defaultFile) {
+              this.renderer.showFrame("idle", defaultFile, true);
+            } else {
+              this.renderer.showRandomFrame("idle", true);
+            }
             this.scheduleBlink();
           }, blinkDuration);
         }, 100);
@@ -176,10 +236,49 @@ export class Animator {
       }
     }, blinkDuration);
   }
+  /** Schedule a random idle expression (e.g. idle3/idle5/idle6). */
+  private scheduleExpression() {
+    if (this.expressionTimer) { clearTimeout(this.expressionTimer); this.expressionTimer = null; }
+    const expressions = this.emotesConfig.idle?.expressions;
+    if (!expressions || expressions.length === 0) return;
+    const delay = randomInRange(this.config.blinkInterval[0], this.config.blinkInterval[1]);
+    this.expressionTimer = setTimeout(() => {
+      if (this.currentState !== "idle") return;
+      this.doExpression();
+    }, delay);
+  }
+
+  /** Show a random expression, hold it, then return to default. */
+  private doExpression() {
+    const expressions = this.emotesConfig.idle?.expressions;
+    if (!expressions || expressions.length === 0) { this.scheduleExpression(); return; }
+    const exprDuration = this.emotesConfig.idle?.expressionDuration ?? 1000;
+    const defaultFile = this.emotesConfig.idle?.default ?? null;
+    const exprFile = expressions[Math.floor(Math.random() * expressions.length)]!;
+
+    if (!this.renderer.showFrame("idle", exprFile)) {
+      this.scheduleExpression();
+      return;
+    }
+
+    setTimeout(() => {
+      if (this.currentState !== "idle") return;
+      if (defaultFile) {
+        this.renderer.showFrame("idle", defaultFile, true);
+      } else {
+        this.renderer.showRandomFrame("idle", true);
+      }
+      this.scheduleExpression();
+    }, exprDuration);
+  }
 
   private enterThink() {
-    const defaultFile = this.emotesConfig.think?.default ?? "think.png";
-    this.renderer.showFrame("think", defaultFile);
+    const defaultFile = this.emotesConfig.think?.default ?? null;
+    if (defaultFile && this.renderer.showFrame("think", defaultFile)) {
+      // use configured default frame
+    } else {
+      this.renderer.showRandomFrame("think");
+    }
     this.scheduleThinkSwap();
   }
 
@@ -193,16 +292,26 @@ export class Animator {
   }
 
   private doThinkSwap() {
-    const hardFile = this.emotesConfig.think?.hard ?? "think_hard.png";
-    if (!this.renderer.showFrame("think", hardFile, true)) {
+    const hardFile = this.emotesConfig.think?.hard ?? null;
+    let swapped = false;
+    if (hardFile) {
+      swapped = this.renderer.showFrame("think", hardFile, true);
+    } else {
+      swapped = this.renderer.showRandomFrame("think", true);
+    }
+    if (!swapped) {
       this.scheduleThinkSwap();
       return;
     }
 
-    const defaultFile = this.emotesConfig.think?.default ?? "think.png";
+    const defaultFile = this.emotesConfig.think?.default ?? null;
     setTimeout(() => {
       if (this.currentState !== "think") return;
-      this.renderer.showFrame("think", defaultFile, true);
+      if (defaultFile) {
+        this.renderer.showFrame("think", defaultFile, true);
+      } else {
+        this.renderer.showRandomFrame("think", true);
+      }
       this.scheduleThinkSwap();
     }, 800);
   }
