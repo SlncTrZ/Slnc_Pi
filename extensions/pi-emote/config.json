@@ -2,8 +2,10 @@
   "enabled": true,
   "debug": false,
   "size": 8,
+  "imageSize": 16,
   "readingSpeed": 4,
   "hideBelow": 20,
+  "alwaysShow": true,
   "holdDuration": {
     "hi": 2000,
     "success": 1200,
@@ -13,7 +15,7 @@
   "talkTickMs": 120,
   "cycleMs": 500,
   "emotes": [
-    { "model": "*", "emote-set": "default" }
+    { "model": "*", "emote-set": "meilin" }
   ],
   "terminals": [
     { "match": "zellij", "render": "ascii" },
