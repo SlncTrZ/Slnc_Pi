@@ -4,7 +4,7 @@
   "size": 8,
   "imageSize": 16,
   "readingSpeed": 4,
-  "hideBelow": 20,
+  "hideBelow": 10,
   "alwaysShow": true,
   "holdDuration": {
     "hi": 2000,
@@ -24,6 +24,7 @@
     { "match": "windows-terminal", "render": "sixel" },
     { "match": "vscode", "render": "ascii" },
     { "match": "wezterm", "render": "iterm2" },
-    { "match": "ghostty", "render": "kitty" }
+    { "match": "ghostty", "render": "kitty" },
+    { "match": "termius", "render": "ascii" }
   ]
 }
