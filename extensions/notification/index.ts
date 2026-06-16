@@ -1522,20 +1522,21 @@ function stripMarkdownForSpeech(markdown: string): string {
 		// Remove markdown headings and blockquotes
 		.replace(/^\s{0,3}#{1,6}\s+/gm, "")
 		.replace(/^\s{0,3}>\s?/gm, "")
+		// === Table handling: remove all table lines entirely ===
+		// Tables are displayed on UI; TTS only needs narrative text
+		.replace(/^.*\|.*$/gm, "")
+		// === End table handling ===
+		// Normalize line breaks: insert period where lines lack ending punctuation
+		// Prevents text like "không chậm\n- item" from becoming "không chậmitem" after stripping
+		.replace(/(?<![.!?:])[\r\n]+(?![.!?0-9])/g, ". ")
 		// Remove unordered list markers (-, *, +) but keep numbered lists (1., 2., etc.)
 		.replace(/^\s*[-*+]\s+/gm, "")
-		// === Table handling ===
-		// Remove table separator lines: |---|, |:---|, |:---:|
-		.replace(/^\s*\|[:-]+\|[:\-| :]*\|?\s*$/gm, "")
-		// Convert table data rows: | A | B | C | → A: B, C
-		.replace(/^\s*\|(.+)\|\s*$/gm, (_, content) => {
-			const cells = content.split("|").map((s: string) => s.trim()).filter(Boolean);
-			if (cells.length === 0) return "";
-			if (cells.length === 1) return cells[0];
-			// First cell as label, rest joined
-			return `${cells[0]}: ${cells.slice(1).join(", ")}`;
-		})
-		// === End table handling ===
+		// Clean up leftover inline dash markers after line break normalize: ". - item" → ". item"
+		.replace(/\.\s*-\s+/g, ". ")
+		// Clean up double periods from table separator + line break normalize: ". . " → ". "
+		.replace(/\.\s+\./g, ". ")
+		// Collapse any remaining double punctuation from artifact removal
+		.replace(/([.,;:!?])\s+([.,;:!?])/g, "$1 ")
 		// Remove special markdown characters (except | which is already handled above)
 		.replace(/[\\*_~>#]/g, " ")
 		// Remove HTML tags
