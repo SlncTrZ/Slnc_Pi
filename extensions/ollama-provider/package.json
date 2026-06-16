@@ -1,0 +1,8 @@
+{
+  "name": "ollama-provider",
+  "private": true,
+  "description": "Register Ollama provider for PC .171 (gemma4:e4B, qwen3-vl, nomic-embed-text)",
+  "pi": {
+    "extensions": ["./index.js"]
+  }
+}

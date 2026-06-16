@@ -1,8 +1,8 @@
-# Jarod's Pi Extensions
+# Slnc_Pi — Pi Extensions & Skills
 
-A collection of extensions for the [pi coding agent](https://github.com/badlogic/pi-mono/).
+Personal collection of extensions, skills, and tools for the [pi coding agent](https://github.com/badlogic/pi-mono/).
 
-Includes a notification system (beep / TTS), voice input, an animated pixel-art emote widget, and an MCP server adapter — all installable in one step.
+Includes 6 extensions and 4 skills — all installable in one step.
 
 ## Prerequisites
 
@@ -15,8 +15,8 @@ Includes a notification system (beep / TTS), voice input, an animated pixel-art 
 ## Install
 
 ```bash
-git clone https://github.com/JarodMica/jarods-pi-extensions.git
-cd jarods-pi-extensions
+git clone https://github.com/SlncTrZ/Slnc_Pi.git
+cd Slnc_Pi
 npm install
 pi install .
 ```
@@ -31,32 +31,51 @@ pi remove .
 
 ## Extensions
 
+## Extensions
+
 | Extension | Description | Docs |
 |-----------|-------------|------|
 | **[notification](extensions/notification/)** | Audio notifications — beep, TTS, or both (4 engine backends) | [README](extensions/notification/README.md) |
-| **[voice-input](extensions/voice-input/)** | Local voice input that streams microphone audio to either the bundled Voxtral worker or a local WebSocket ASR server, fills the editor, and supports voice submit commands | [README](extensions/voice-input/README.md) |
+| **[voice-input](extensions/voice-input/)** | Local voice input — Voxtral/NeMo worker, 3 listening modes, wake phrase | [README](extensions/voice-input/README.md) |
 | **[pi-emote](extensions/pi-emote/)** | Animated pixel-art avatar that reacts to agent activity | [README](extensions/pi-emote/README.md) |
 | **[pi-mcp-adapter](extensions/pi-mcp-adapter/)** | Connect to MCP servers via a single ~200-token proxy tool | [README](extensions/pi-mcp-adapter/README.md) |
 | **[system-prompt](extensions/system-prompt/)** | Select append-only system prompt profiles, including trust-but-verify validation behavior | [README](extensions/system-prompt/README.md) |
+| **[conversation-saver](extensions/conversation-saver/)** | Auto-save Pi conversation to Qdrant MeiLin Knowledge Base | — |
+| **[ollama-provider](extensions/ollama-provider/)** | Register local Ollama provider (PC .171: gemma4, qwen3-vl) | — |
+
+## Skills
+
+| Skill | Description |
+|-------|-------------|
+| **[caveman](skills/caveman/)** | Nói tiếng Việt kiểu người tiền sử |
+| **[meilin-kb](skills/meilin-kb/)** | Qdrant 6-Wing Knowledge Base with Ollama embedding |
+| **[vision-analyzer](skills/vision-analyzer/)** | Phân tích ảnh bằng qwen3-vl:2b-thinking trên Ollama |
+| **[workflow-best-practices](skills/workflow-best-practices/)** | Workflow script best practices cho pi-dynamic-workflows |
 
 ## Repository Structure
 
 ```
-jarods-pi-extensions/
+Slnc_Pi/
 ├── extensions/
-│   ├── notification/     — Notification extension (beep / TTS)
-│   ├── voice-input/      — Local voice input extension (bundled Voxtral worker or WebSocket ASR server)
-│   ├── pi-emote/         — Pixel-art emote widget (vendored from cgxeiji/pi-emote)
-│   ├── pi-mcp-adapter/   — MCP server adapter (vendored from nicobailon/pi-mcp-adapter)
-│   └── system-prompt/    — Append-only selectable system prompt profiles
-├── skills/               — Skill directories (placeholder, add SKILL.md files)
-├── prompts/              — Prompt templates (placeholder, add .md files)
+│   ├── notification/         — Notification extension (beep / TTS)
+│   ├── voice-input/          — Local voice input (Voxtral/NeMo worker)
+│   ├── pi-emote/             — Pixel-art emote widget (vendored)
+│   ├── pi-mcp-adapter/       — MCP server adapter (vendored)
+│   ├── system-prompt/        — Append-only system prompt profiles
+│   ├── conversation-saver/   — Auto-save conversation to Qdrant
+│   └── ollama-provider/      — Ollama provider (.171 server)
+├── skills/
+│   ├── caveman/              — Caveman tiếng Việt
+│   ├── meilin-kb/            — Qdrant 6-Wing Knowledge Base
+│   ├── vision-analyzer/      — Image analysis (qwen3-vl)
+│   └── workflow-best-practices/ — Workflow script syntax
+├── prompts/               — Prompt templates (empty, add .md files)
 ├── docs/
-│   ├── CONFIG.md         — Notification configuration reference
-│   ├── CODE_STANDARDS.md — Repository code and workflow standards
-│   └── AUTHOR_NOTES.md   — Author-facing documentation guidance
-├── package.json          — Root package manifest (pi discovers extensions/skills/prompts)
-└── tsconfig.json         — TypeScript config
+│   ├── CONFIG.md           — Notification configuration reference
+│   ├── CODE_STANDARDS.md   — Repository code and workflow standards
+│   └── AUTHOR_NOTES.md     — Author-facing documentation guidance
+├── package.json            — Root package manifest
+└── tsconfig.json           — TypeScript config
 ```
 
 The root `package.json` declares `pi.extensions`, `pi.skills`, and `pi.prompts` paths. Pi discovers extension subdirectories under `./extensions` and honors each subpackage's `pi.extensions` manifest. For a cloned local checkout, run `npm install` first so extension dependencies are available, then run `pi install .`.
@@ -79,9 +98,12 @@ After adding content, run `/reload` inside pi to pick up the changes.
 
 ## Upstream Sources
 
-| Extension | Upstream |
+| Component | Upstream |
 |-----------|----------|
-| `pi-emote` | [cgxeiji/pi-emote](https://github.com/cgxeiji/pi-emote) |
-| `pi-mcp-adapter` | [nicobailon/pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) |
+| `pi-emote` | [cgxeiji/pi-emote](https://github.com/cgxeiji/pi-emote) — vendored |
+| `pi-mcp-adapter` | [nicobailon/pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) — vendored |
 | `notification` | Local / custom |
 | `voice-input` | Local / custom |
+| `conversation-saver` | Local / custom |
+| `ollama-provider` | Local / custom |
+| All skills | Local / custom |

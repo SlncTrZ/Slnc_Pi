@@ -1,5 +1,17 @@
 # AI Changelog
 
+## 2026-06-16
+- **Complete Repo Sync — Added Missing Extensions & Skills**:
+  - **Added** `extensions/conversation-saver/` — auto-save Pi conversation to Qdrant (MeiLin wing conversation), registers `save_conversation` tool
+  - **Added** `extensions/ollama-provider/` — register Ollama provider for PC .171 (gemma4:e4B reasoning model)
+  - **Added** `skills/caveman/` — caveman mode speaking style (SKILL.md)
+  - **Added** `skills/meilin-kb/` — Qdrant 6-Wing Knowledge Base RAG skill with full store/search/searchAll/post-action log protocols (SKILL.md)
+  - **Added** `skills/vision-analyzer/` — image analysis via qwen3-vl:2b-thinking on Ollama .171, includes `scripts/analyze.mjs` for local/URL image processing
+  - **Added** `skills/workflow-best-practices/` — pi-dynamic-workflows script syntax rules (top-level await, parallel thunks, no async function wrapper)
+  - **Updated** root `README.md`: new title, corrected clone URL, added 2 extensions + 4 skills to tables and structure tree
+  - **Removed** `extensions/.gitkeep` and `skills/.gitkeep` (no longer needed)
+  - **Verification:** All 7 extensions + 4 skills confirmed present in repo; npm install + pi install . ready
+
 ## 2026-06-13
 - **Documentation Verification — Voice Input Local Server Mode**:
   - Inconsistency: Root `README.md` described `voice-input` only as a Voxtral worker extension, while code also supports `workerProtocol=websocket` with a local ASR server at `ws://127.0.0.1:8765/ws` and health checks at `http://127.0.0.1:8765/health`.

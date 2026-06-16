@@ -1,0 +1,14 @@
+{
+  "name": "conversation-saver",
+  "private": true,
+  "description": "Auto-save Pi conversation to Qdrant MeiLin Knowledge Base",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
