@@ -10,7 +10,7 @@ import { Box, Text } from "@earendil-works/pi-tui";
 import { openMenu, type MenuItem } from "./menu";
 
 type NotificationMode = "off" | "beep" | "tts" | "both";
-type TtsEngine = "fish" | "openai-compatible" | "windows-native" | "vllm-omni";
+type TtsEngine = "fish" | "openai-compatible" | "windows-native" | "vllm-omni" | "omnivoice";
 
 type FishSettings = {
 	apiKey?: string;
@@ -33,6 +33,11 @@ type VllmOmniSettings = {
 	maxNewTokens?: number;
 };
 
+type OmniVoiceSettings = {
+	baseUrl?: string;
+	profile?: string;
+};
+
 type TtsOutputMode = "verbose" | "shortened";
 
 type SummarizerSettings = {
@@ -47,12 +52,13 @@ type NotificationSettings = {
 	fish?: FishSettings;
 	openAiCompatible?: OpenAiCompatibleSettings;
 	vllmOmni?: VllmOmniSettings;
+	omnivoice?: OmniVoiceSettings;
 	ttsOutputMode?: TtsOutputMode;
 	summarizer?: SummarizerSettings;
 };
 
 const MODES = ["off", "beep", "tts", "both"] as const;
-const TTS_ENGINES = ["fish", "openai-compatible", "windows-native", "vllm-omni"] as const;
+const TTS_ENGINES = ["fish", "openai-compatible", "windows-native", "vllm-omni", "omnivoice"] as const;
 const SETTINGS_PATH = join(getAgentDir(), "notification.json");
 const BEEP_PATH = join(__dirname, "beep.wav");
 const STATUS_KEY = "notification";
@@ -64,6 +70,8 @@ const DEFAULT_OPENAI_COMPATIBLE_MODEL = "tts-1";
 const DEFAULT_OPENAI_COMPATIBLE_VOICE = "alloy";
 const DEFAULT_VLLM_OMNI_BASE_URL = "http://localhost:8091";
 const DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS = 256;
+const DEFAULT_OMNIVOICE_BASE_URL = "http://192.168.1.171:8880/v1";
+const DEFAULT_OMNIVOICE_PROFILE = "Nu-01-Mai";
 const DEFAULT_TTS_OUTPUT_MODE: TtsOutputMode = "verbose";
 const DEFAULT_SUMMARIZER_SKIP_THRESHOLD = 4;
 const VLLM_OMNI_SAMPLE_RATE = 44100;
@@ -111,6 +119,10 @@ function defaultSettings(): Required<Pick<NotificationSettings, "mode" | "ttsEng
 			baseUrl: DEFAULT_VLLM_OMNI_BASE_URL,
 			maxNewTokens: DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS,
 		},
+		omnivoice: {
+			baseUrl: DEFAULT_OMNIVOICE_BASE_URL,
+			profile: DEFAULT_OMNIVOICE_PROFILE,
+		},
 		ttsOutputMode: DEFAULT_TTS_OUTPUT_MODE,
 		summarizer: {
 			skipThreshold: DEFAULT_SUMMARIZER_SKIP_THRESHOLD,
@@ -128,6 +140,7 @@ function normalizeSettings(settings: NotificationSettings): NotificationSettings
 		fish: { ...defaults.fish, ...settings.fish },
 		openAiCompatible: { ...defaults.openAiCompatible, ...settings.openAiCompatible },
 		vllmOmni: { ...defaults.vllmOmni, ...settings.vllmOmni },
+		omnivoice: { ...defaults.omnivoice, ...settings.omnivoice },
 		ttsOutputMode: settings.ttsOutputMode && isTtsOutputMode(settings.ttsOutputMode) ? settings.ttsOutputMode : defaults.ttsOutputMode,
 		summarizer: { ...defaults.summarizer, ...settings.summarizer },
 	};
@@ -233,6 +246,14 @@ function getOpenAiCompatibleApiKey(settings: NotificationSettings): string | und
 
 function getVllmOmniBaseUrl(settings: NotificationSettings): string {
 	return settings.vllmOmni?.baseUrl?.trim() ?? DEFAULT_VLLM_OMNI_BASE_URL;
+}
+
+function getOmniVoiceBaseUrl(settings: NotificationSettings): string {
+	return settings.omnivoice?.baseUrl?.trim() ?? DEFAULT_OMNIVOICE_BASE_URL;
+}
+
+function getOmniVoiceProfile(settings: NotificationSettings): string {
+	return settings.omnivoice?.profile?.trim() || DEFAULT_OMNIVOICE_PROFILE;
 }
 
 /** Derive a voice name from the audio file basename (e.g. "my_voice.wav" → "my_voice"). */
@@ -1084,6 +1105,24 @@ function joinUrl(baseUrl: string, path: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
+async function synthesizeOmniVoiceWav(text: string, settings: NotificationSettings): Promise<Uint8Array> {
+	const baseUrl = getOmniVoiceBaseUrl(settings);
+	const profile = getOmniVoiceProfile(settings);
+
+	const response = await fetch(joinUrl(baseUrl, "audio/speech"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			model: "omnivoice",
+			voice: profile,
+			input: text,
+			response_format: "wav",
+		}),
+	});
+	await ensureOk(response);
+	return new Uint8Array(await response.arrayBuffer());
+}
+
 async function synthesizeOpenAiCompatibleWav(text: string, settings: NotificationSettings): Promise<Uint8Array> {
 	const config = settings.openAiCompatible ?? {};
 	const apiKey = getOpenAiCompatibleApiKey(settings);
@@ -1123,6 +1162,17 @@ $speak.Speak('${escapePowerShellSingleQuoted(cleaned)}');`);
 		return;
 	}
 
+	if (settings.ttsEngine === "omnivoice") {
+		const bytes = await synthesizeOmniVoiceWav(cleaned, settings);
+		const path = writeTempWav(bytes);
+		try {
+			await playTtsWav(path);
+		} finally {
+			deleteFileBestEffort(path);
+		}
+		return;
+	}
+
 	if (settings.ttsEngine !== "openai-compatible") {
 		await streamFishPcmToFfplay(cleaned, settings);
 		return;
@@ -1145,6 +1195,8 @@ async function synthesizeDiagnosticWav(text: string, settings: NotificationSetti
 		audioBytes = await synthesizeOpenAiCompatibleWav(cleaned, settings);
 	} else if (settings.ttsEngine === "vllm-omni") {
 		audioBytes = await synthesizeVllmOmniWav(cleaned, settings);
+	} else if (settings.ttsEngine === "omnivoice") {
+		audioBytes = await synthesizeOmniVoiceWav(cleaned, settings);
 	} else {
 		audioBytes = await synthesizeFishWav(cleaned, settings);
 	}
@@ -1459,6 +1511,8 @@ function getStatus(settings: NotificationSettings): string {
 		`vLLM-Omni audio: ${settings.vllmOmni?.audioPath ?? "not set"}`,
 		`vLLM-Omni transcript: ${settings.vllmOmni?.refTextPath ?? "not set"}`,
 		`vLLM-Omni voice cached: ${settings.vllmOmni?.voiceCached ? "yes" : "no"}`,
+		`OmniVoice base URL: ${settings.omnivoice?.baseUrl ?? DEFAULT_OMNIVOICE_BASE_URL}`,
+		`OmniVoice profile: ${settings.omnivoice?.profile ?? DEFAULT_OMNIVOICE_PROFILE}`,
 		`TTS output: ${settings.ttsOutputMode ?? DEFAULT_TTS_OUTPUT_MODE}`,
 		`Summarizer model: ${settings.summarizer?.provider && settings.summarizer?.modelId ? `${settings.summarizer.provider}:${settings.summarizer.modelId}` : "not set"}`,
 		`Summarizer skip threshold: ${settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD} sentences`,
@@ -1717,6 +1771,22 @@ export default function notificationExtension(pi: ExtensionAPI) {
 						children: () => [
 							{ type: "action", id: "engine-set:windows-native", label: "Select windows-native" },
 						],
+					},
+					{
+						type: "submenu",
+						id: "engine:omnivoice",
+						label: currentEngine === "omnivoice" ? "▸ omnivoice (current)" : "omnivoice",
+						children: () => {
+							const omniProfile = getOmniVoiceProfile(settings);
+							const omniUrl = getOmniVoiceBaseUrl(settings);
+							return [
+								{ type: "action", id: "engine-set:omnivoice", label: "Select omnivoice" },
+								{ type: "input", id: "omnivoice:set-url", label: "Set base URL", prompt: "OmniVoice base URL:", currentValue: omniUrl },
+								{ type: "input", id: "omnivoice:set-profile", label: "Set profile", prompt: "OmniVoice profile (voice name):", currentValue: omniProfile },
+								{ type: "action", id: "omnivoice:test-connection", label: "Test server connection" },
+								{ type: "action", id: "omnivoice:test-tts", label: "Test TTS playback" },
+							];
+						},
 					},
 					{
 						type: "submenu",
@@ -1995,6 +2065,56 @@ if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
 				if (ctx) ctx.ui.notify("TTS test completed.", "info");
 			} catch (error) {
 				notifyFailure(ctx, `TTS test failed: ${formatError(error)}`);
+			}
+			return;
+		}
+
+		// OmniVoice config
+		if (id === "omnivoice:set-url") {
+			if (value) {
+				settings.omnivoice = { ...settings.omnivoice, baseUrl: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("OmniVoice base URL updated", "info");
+			}
+			return;
+		}
+		if (id === "omnivoice:set-profile") {
+			if (value) {
+				settings.omnivoice = { ...settings.omnivoice, profile: value };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("OmniVoice profile set to " + value, "info");
+			}
+			return;
+		}
+		if (id === "omnivoice:test-connection") {
+			const baseUrl = getOmniVoiceBaseUrl(settings);
+			try {
+				if (ctx) ctx.ui.notify(`Pinging ${baseUrl}/health...`, "info");
+				const res = await fetch(joinUrl(baseUrl, "health"), { signal: AbortSignal.timeout(5000) });
+				if (res.ok) {
+					if (ctx) ctx.ui.notify(`OmniVoice server is reachable at ${baseUrl}`, "info");
+				} else {
+					if (ctx) ctx.ui.notify(`Server responded with status ${res.status}`, "warning");
+				}
+			} catch (error) {
+				notifyFailure(ctx, `Cannot reach OmniVoice server at ${baseUrl}: ${formatError(error)}`);
+			}
+			return;
+		}
+		if (id === "omnivoice:test-tts") {
+			const text = "Xin chào anh, em là MeiLin. Đây là giọng nói OmniVoice Nu-01-Mai.";
+			try {
+				if (ctx) ctx.ui.notify("Testing OmniVoice TTS...", "info");
+				const bytes = await synthesizeOmniVoiceWav(text, settings);
+				const path = writeTempWav(bytes);
+				try {
+					await playTtsWav(path);
+					if (ctx) ctx.ui.notify("OmniVoice TTS test completed", "info");
+				} finally {
+					deleteFileBestEffort(path);
+				}
+			} catch (error) {
+				notifyFailure(ctx, `OmniVoice TTS test failed: ${formatError(error)}`);
 			}
 			return;
 		}
