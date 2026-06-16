@@ -200,7 +200,7 @@ async function aiMemoryRead(query) {
 
 ## 5. Post-Action Log Protocol (BẮT BUỘC)
 
-> **Rule:** Sau mỗi thay đổi code/file → gọi `knowledge_store` log chi tiết (file, diff, logic).
+> **Rule từ AGENTS.md:** Sau mỗi thay đổi code/file → gọi `knowledge_store` log chi tiết (file, diff, logic).
 
 Mỗi khi em thực hiện thay đổi (edit/write file), PHẢI chạy:
 
@@ -238,6 +238,7 @@ const serverInfo = await knowledgeSearch({
 ```
 
 Quick reference từ kết quả:
+
 - **Server .227**: i5-8250U/8GB/163GB | Ubuntu 24.04 | 18 containers | `/home/dinhtc/docker-all/`
 - **PC .171**: Ollama server | models: nomic-embed-text, gemma4:e2b, qwen3-vl:2b-thinking
 - **Local**: `H:\Develop` (Windows 11)
@@ -283,6 +284,14 @@ async function conversationRecall({ query, channel, limit }) {
   return results;
 }
 ```
+
+### 7.3 Đề xuất: Auto-save conversation cho Pi
+
+**Cơ chế:** Cuối mỗi session (hoặc mỗi N tin nhắn), tự động:
+
+1. Tóm tắt conversation thành 1-3 câu
+2. Lưu vào wing `conversation` với channel `pi`
+3. (Optional) Export ra file `.md` trong thư mục chỉ định
 
 ---
 

@@ -1,16 +1,32 @@
-import { existsSync, mkdirSync, readFileSync, unlink, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	unlink,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { connect as connectTls, type TLSSocket } from "node:tls";
 import { connect as connectNet, type Socket } from "node:net";
 import { randomBytes } from "node:crypto";
-import { getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+	getAgentDir,
+	type ExtensionAPI,
+	type ExtensionCommandContext,
+	type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
 import { openMenu, type MenuItem } from "./menu";
 
 type NotificationMode = "off" | "beep" | "tts" | "both";
-type TtsEngine = "fish" | "openai-compatible" | "windows-native" | "vllm-omni" | "omnivoice";
+type TtsEngine =
+	| "fish"
+	| "openai-compatible"
+	| "windows-native"
+	| "vllm-omni"
+	| "omnivoice";
 
 type FishSettings = {
 	apiKey?: string;
@@ -58,7 +74,13 @@ type NotificationSettings = {
 };
 
 const MODES = ["off", "beep", "tts", "both"] as const;
-const TTS_ENGINES = ["fish", "openai-compatible", "windows-native", "vllm-omni", "omnivoice"] as const;
+const TTS_ENGINES = [
+	"fish",
+	"openai-compatible",
+	"windows-native",
+	"vllm-omni",
+	"omnivoice",
+] as const;
 const SETTINGS_PATH = join(getAgentDir(), "notification.json");
 const BEEP_PATH = join(__dirname, "beep.wav");
 const STATUS_KEY = "notification";
@@ -95,14 +117,20 @@ function formatError(error: unknown): string {
 	return String(error);
 }
 
-function notifyFailure(ctx: ExtensionContext | undefined, message: string): void {
+function notifyFailure(
+	ctx: ExtensionContext | undefined,
+	message: string,
+): void {
 	if (ctx?.hasUI) {
 		ctx.ui.notify(message, "error");
 	}
 	console.error(`[notification] ${message}`);
 }
 
-function defaultSettings(): Required<Pick<NotificationSettings, "mode" | "ttsEngine">> & NotificationSettings {
+function defaultSettings(): Required<
+	Pick<NotificationSettings, "mode" | "ttsEngine">
+> &
+	NotificationSettings {
 	return {
 		mode: "off",
 		ttsEngine: "fish",
@@ -130,18 +158,32 @@ function defaultSettings(): Required<Pick<NotificationSettings, "mode" | "ttsEng
 	};
 }
 
-function normalizeSettings(settings: NotificationSettings): NotificationSettings {
+function normalizeSettings(
+	settings: NotificationSettings,
+): NotificationSettings {
 	const defaults = defaultSettings();
 	return {
 		...defaults,
 		...settings,
-		mode: settings.mode && isNotificationMode(settings.mode) ? settings.mode : defaults.mode,
-		ttsEngine: settings.ttsEngine && isTtsEngine(settings.ttsEngine) ? settings.ttsEngine : defaults.ttsEngine,
+		mode:
+			settings.mode && isNotificationMode(settings.mode)
+				? settings.mode
+				: defaults.mode,
+		ttsEngine:
+			settings.ttsEngine && isTtsEngine(settings.ttsEngine)
+				? settings.ttsEngine
+				: defaults.ttsEngine,
 		fish: { ...defaults.fish, ...settings.fish },
-		openAiCompatible: { ...defaults.openAiCompatible, ...settings.openAiCompatible },
+		openAiCompatible: {
+			...defaults.openAiCompatible,
+			...settings.openAiCompatible,
+		},
 		vllmOmni: { ...defaults.vllmOmni, ...settings.vllmOmni },
 		omnivoice: { ...defaults.omnivoice, ...settings.omnivoice },
-		ttsOutputMode: settings.ttsOutputMode && isTtsOutputMode(settings.ttsOutputMode) ? settings.ttsOutputMode : defaults.ttsOutputMode,
+		ttsOutputMode:
+			settings.ttsOutputMode && isTtsOutputMode(settings.ttsOutputMode)
+				? settings.ttsOutputMode
+				: defaults.ttsOutputMode,
 		summarizer: { ...defaults.summarizer, ...settings.summarizer },
 	};
 }
@@ -149,42 +191,73 @@ function normalizeSettings(settings: NotificationSettings): NotificationSettings
 function loadSettings(): NotificationSettings {
 	if (!existsSync(SETTINGS_PATH)) return defaultSettings();
 	try {
-		const data = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8")) as NotificationSettings;
+		const data = JSON.parse(
+			readFileSync(SETTINGS_PATH, "utf-8"),
+		) as NotificationSettings;
 		return normalizeSettings(data);
 	} catch (error) {
-		console.error(`[notification] Failed to read ${SETTINGS_PATH}: ${formatError(error)}`);
+		console.error(
+			`[notification] Failed to read ${SETTINGS_PATH}: ${formatError(error)}`,
+		);
 		return defaultSettings();
 	}
 }
 
 function saveSettings(settings: NotificationSettings): void {
 	mkdirSync(dirname(SETTINGS_PATH), { recursive: true });
-	writeFileSync(SETTINGS_PATH, `${JSON.stringify(normalizeSettings(settings), null, 2)}\n`, "utf-8");
+	writeFileSync(
+		SETTINGS_PATH,
+		`${JSON.stringify(normalizeSettings(settings), null, 2)}\n`,
+		"utf-8",
+	);
 }
 
 function escapePowerShellSingleQuoted(value: string): string {
 	return value.replace(/'/g, "''");
 }
 
-function runPowerShell(script: string, env?: NodeJS.ProcessEnv, options?: { sta?: boolean }): Promise<void> {
+function runPowerShell(
+	script: string,
+	env?: NodeJS.ProcessEnv,
+	options?: { sta?: boolean },
+): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const args = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script];
+		const args = [
+			"-NoProfile",
+			"-NonInteractive",
+			"-ExecutionPolicy",
+			"Bypass",
+			"-Command",
+			script,
+		];
 		if (options?.sta) args.unshift("-Sta");
-		execFile("powershell.exe", args, { windowsHide: true, env: env ? { ...process.env, ...env } : process.env }, (error, _stdout, stderr) => {
-			if (error) {
-				const detail = stderr?.trim();
-				reject(new Error(detail ? `${error.message}: ${detail}` : error.message));
-				return;
-			}
-			resolve();
-		});
+		execFile(
+			"powershell.exe",
+			args,
+			{
+				windowsHide: true,
+				env: env ? { ...process.env, ...env } : process.env,
+			},
+			(error, _stdout, stderr) => {
+				if (error) {
+					const detail = stderr?.trim();
+					reject(
+						new Error(detail ? `${error.message}: ${detail}` : error.message),
+					);
+					return;
+				}
+				resolve();
+			},
+		);
 	});
 }
 
 async function playWav(path: string): Promise<void> {
 	if (process.platform === "win32") {
 		const wavPath = escapePowerShellSingleQuoted(path);
-		await runPowerShell(`$player = New-Object System.Media.SoundPlayer '${wavPath}'; $player.Load(); $player.PlaySync()`);
+		await runPowerShell(
+			`$player = New-Object System.Media.SoundPlayer '${wavPath}'; $player.Load(); $player.PlaySync()`,
+		);
 		return;
 	}
 
@@ -237,11 +310,19 @@ function getEnvValue(names: string[]): string | undefined {
 }
 
 function getFishApiKey(settings: NotificationSettings): string | undefined {
-	return getEnvValue(["PI_NOTIFICATION_FISH_API_KEY", "FISH_AUDIO_API_KEY"]) ?? settings.fish?.apiKey?.trim();
+	return (
+		getEnvValue(["PI_NOTIFICATION_FISH_API_KEY", "FISH_AUDIO_API_KEY"]) ??
+		settings.fish?.apiKey?.trim()
+	);
 }
 
-function getOpenAiCompatibleApiKey(settings: NotificationSettings): string | undefined {
-	return getEnvValue(["PI_NOTIFICATION_OPENAI_TTS_API_KEY", "OPENAI_API_KEY"]) ?? settings.openAiCompatible?.apiKey?.trim();
+function getOpenAiCompatibleApiKey(
+	settings: NotificationSettings,
+): string | undefined {
+	return (
+		getEnvValue(["PI_NOTIFICATION_OPENAI_TTS_API_KEY", "OPENAI_API_KEY"]) ??
+		settings.openAiCompatible?.apiKey?.trim()
+	);
 }
 
 function getVllmOmniBaseUrl(settings: NotificationSettings): string {
@@ -259,11 +340,18 @@ function getOmniVoiceProfile(settings: NotificationSettings): string {
 /** Derive a voice name from the audio file basename (e.g. "my_voice.wav" → "my_voice"). */
 function deriveVoiceName(audioPath: string): string {
 	const base = audioPath.split(/[/\\]/).pop() ?? "voice";
-	return base.replace(/\.[^.]+$/, "").replace(/[^\w-]/g, "_").slice(0, 64) || "voice";
+	return (
+		base
+			.replace(/\.[^.]+$/, "")
+			.replace(/[^\w-]/g, "_")
+			.slice(0, 64) || "voice"
+	);
 }
 
 /** Read the reference text from a file path, or return undefined. */
-function readRefTextFromPath(refTextPath: string | undefined): string | undefined {
+function readRefTextFromPath(
+	refTextPath: string | undefined,
+): string | undefined {
 	if (!refTextPath || !existsSync(refTextPath)) return undefined;
 	try {
 		return readFileSync(refTextPath, "utf-8").trim();
@@ -275,23 +363,36 @@ function readRefTextFromPath(refTextPath: string | undefined): string | undefine
 async function ensureOk(response: Response): Promise<void> {
 	if (response.ok) return;
 	const text = await response.text().catch(() => "");
-	throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 500)}` : ""}`);
+	throw new Error(
+		`HTTP ${response.status}${text ? `: ${text.slice(0, 500)}` : ""}`,
+	);
 }
 
 function validateWav(bytes: Uint8Array): void {
 	if (bytes.length < 44) {
-		throw new Error(`TTS response was too small to be a WAV file (${bytes.length} bytes).`);
+		throw new Error(
+			`TTS response was too small to be a WAV file (${bytes.length} bytes).`,
+		);
 	}
 	const riff = String.fromCharCode(...bytes.slice(0, 4));
 	const wave = String.fromCharCode(...bytes.slice(8, 12));
 	if (riff !== "RIFF" || wave !== "WAVE") {
-		throw new Error(`TTS response was not a WAV file. First bytes: ${Array.from(bytes.slice(0, 16)).map((byte) => byte.toString(16).padStart(2, "0")).join(" ")}`);
+		throw new Error(
+			`TTS response was not a WAV file. First bytes: ${Array.from(
+				bytes.slice(0, 16),
+			)
+				.map((byte) => byte.toString(16).padStart(2, "0"))
+				.join(" ")}`,
+		);
 	}
 }
 
 function writeTempWav(bytes: Uint8Array): string {
 	validateWav(bytes);
-	const path = join(tmpdir(), `pi-notification-tts-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`);
+	const path = join(
+		tmpdir(),
+		`pi-notification-tts-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`,
+	);
 	writeFileSync(path, bytes);
 	return path;
 }
@@ -300,10 +401,15 @@ function deleteFileBestEffort(path: string): void {
 	unlink(path, () => undefined);
 }
 
-async function synthesizeFishWav(text: string, settings: NotificationSettings): Promise<Uint8Array> {
+async function synthesizeFishWav(
+	text: string,
+	settings: NotificationSettings,
+): Promise<Uint8Array> {
 	const apiKey = getFishApiKey(settings);
 	if (!apiKey) {
-		throw new Error("Fish Audio API key is not configured. Set PI_NOTIFICATION_FISH_API_KEY/FISH_AUDIO_API_KEY or run /notification tts-key fish <key>.");
+		throw new Error(
+			"Fish Audio API key is not configured. Set PI_NOTIFICATION_FISH_API_KEY/FISH_AUDIO_API_KEY or run /notification tts-key fish <key>.",
+		);
 	}
 
 	const response = await fetch("https://api.fish.audio/v1/tts", {
@@ -414,7 +520,9 @@ function encodeMsgpack(value: unknown): Uint8Array {
 			return;
 		}
 		if (typeof item === "object") {
-			const entries = Object.entries(item as Record<string, unknown>).filter(([, entryValue]) => entryValue !== undefined);
+			const entries = Object.entries(item as Record<string, unknown>).filter(
+				([, entryValue]) => entryValue !== undefined,
+			);
 			if (entries.length <= 15) write(0x80 | entries.length);
 			else {
 				write(0xde);
@@ -461,8 +569,10 @@ function decodeMsgpack(data: Uint8Array): unknown {
 			for (let i = 0; i < count; i++) object[String(decode())] = decode();
 			return object;
 		}
-		if (prefix >= 0x90 && prefix <= 0x9f) return Array.from({ length: prefix & 0x0f }, () => decode());
-		if (prefix >= 0xa0 && prefix <= 0xbf) return decoder.decode(readBytes(prefix & 0x1f));
+		if (prefix >= 0x90 && prefix <= 0x9f)
+			return Array.from({ length: prefix & 0x0f }, () => decode());
+		if (prefix >= 0xa0 && prefix <= 0xbf)
+			return decoder.decode(readBytes(prefix & 0x1f));
 		switch (prefix) {
 			case 0xc0:
 				return null;
@@ -510,7 +620,9 @@ function decodeMsgpack(data: Uint8Array): unknown {
 				return object;
 			}
 			default:
-				throw new Error(`Unsupported MessagePack prefix 0x${prefix.toString(16)}`);
+				throw new Error(
+					`Unsupported MessagePack prefix 0x${prefix.toString(16)}`,
+				);
 		}
 	};
 	return decode();
@@ -533,18 +645,29 @@ function createWebSocketFrame(payload: Uint8Array, opcode = 0x2): Buffer {
 	}
 	const maskOffset = headerLength;
 	mask.copy(frame, maskOffset);
-	for (let i = 0; i < length; i++) frame[maskOffset + 4 + i] = payload[i] ^ mask[i % 4];
+	for (let i = 0; i < length; i++)
+		frame[maskOffset + 4 + i] = payload[i] ^ mask[i % 4];
 	return frame;
 }
 
-function createFishWebSocket(apiKey: string, model: string, onMessage: (payload: Uint8Array) => void, onClose: () => void, onError: (error: Error) => void): Promise<{ send: (value: unknown) => void; close: () => void }> {
+function createFishWebSocket(
+	apiKey: string,
+	model: string,
+	onMessage: (payload: Uint8Array) => void,
+	onClose: () => void,
+	onError: (error: Error) => void,
+): Promise<{ send: (value: unknown) => void; close: () => void }> {
 	return new Promise((resolve, reject) => {
 		const key = randomBytes(16).toString("base64");
 		let buffer = Buffer.alloc(0);
 		let handshakeDone = false;
 		let settled = false;
 		let fragmented: Buffer[] = [];
-		const socket = connectTls({ host: "api.fish.audio", port: 443, servername: "api.fish.audio" });
+		const socket = connectTls({
+			host: "api.fish.audio",
+			port: 443,
+			servername: "api.fish.audio",
+		});
 		const fail = (error: Error) => {
 			if (!settled) {
 				settled = true;
@@ -556,7 +679,8 @@ function createFishWebSocket(apiKey: string, model: string, onMessage: (payload:
 				socket.destroy();
 			} catch {}
 		};
-		const sendFrame = (payload: Uint8Array, opcode = 0x2) => socket.write(createWebSocketFrame(payload, opcode));
+		const sendFrame = (payload: Uint8Array, opcode = 0x2) =>
+			socket.write(createWebSocketFrame(payload, opcode));
 		const parseFrames = () => {
 			while (buffer.length >= 2) {
 				const first = buffer[0];
@@ -581,7 +705,9 @@ function createFishWebSocket(apiKey: string, model: string, onMessage: (payload:
 				let payload = buffer.subarray(offset, offset + length);
 				if (masked) {
 					const mask = buffer.subarray(maskOffset, maskOffset + 4);
-					payload = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]));
+					payload = Buffer.from(
+						payload.map((byte, index) => byte ^ mask[index % 4]),
+					);
 				}
 				buffer = buffer.subarray(offset + length);
 				if (opcode === 0x8) {
@@ -618,14 +744,24 @@ function createFishWebSocket(apiKey: string, model: string, onMessage: (payload:
 			);
 		});
 		socket.on("data", (chunk) => {
-			buffer = Buffer.concat([buffer, typeof chunk === "string" ? Buffer.from(chunk) : chunk]);
+			buffer = Buffer.concat([
+				buffer,
+				typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+			]);
 			if (!handshakeDone) {
 				const headerEnd = buffer.indexOf("\r\n\r\n");
 				if (headerEnd === -1) return;
 				const headers = buffer.subarray(0, headerEnd).toString("utf-8");
 				buffer = buffer.subarray(headerEnd + 4);
-				if (!headers.startsWith("HTTP/1.1 101") && !headers.startsWith("HTTP/1.0 101")) {
-					fail(new Error(`Fish Audio WebSocket handshake failed: ${headers.split("\r\n")[0]}`));
+				if (
+					!headers.startsWith("HTTP/1.1 101") &&
+					!headers.startsWith("HTTP/1.0 101")
+				) {
+					fail(
+						new Error(
+							`Fish Audio WebSocket handshake failed: ${headers.split("\r\n")[0]}`,
+						),
+					);
 					return;
 				}
 				handshakeDone = true;
@@ -647,16 +783,38 @@ function createFishWebSocket(apiKey: string, model: string, onMessage: (payload:
 	});
 }
 
-async function streamFishPcmToFfplay(text: string, settings: NotificationSettings): Promise<void> {
+async function streamFishPcmToFfplay(
+	text: string,
+	settings: NotificationSettings,
+): Promise<void> {
 	const apiKey = getFishApiKey(settings);
 	if (!apiKey) {
-		throw new Error("Fish Audio API key is not configured. Set PI_NOTIFICATION_FISH_API_KEY/FISH_AUDIO_API_KEY or run /notification tts-key fish <key>.");
+		throw new Error(
+			"Fish Audio API key is not configured. Set PI_NOTIFICATION_FISH_API_KEY/FISH_AUDIO_API_KEY or run /notification tts-key fish <key>.",
+		);
 	}
 
-	const player = spawn("ffplay", ["-nodisp", "-autoexit", "-loglevel", "error", "-f", "s16le", "-ar", String(FISH_STREAM_SAMPLE_RATE), "-ac", "1", "-i", "pipe:0"], {
-		windowsHide: true,
-		stdio: ["pipe", "ignore", "pipe"],
-	});
+	const player = spawn(
+		"ffplay",
+		[
+			"-nodisp",
+			"-autoexit",
+			"-loglevel",
+			"error",
+			"-f",
+			"s16le",
+			"-ar",
+			String(FISH_STREAM_SAMPLE_RATE),
+			"-ac",
+			"1",
+			"-i",
+			"pipe:0",
+		],
+		{
+			windowsHide: true,
+			stdio: ["pipe", "ignore", "pipe"],
+		},
+	);
 	let playerError = "";
 	player.stderr?.on("data", (chunk) => {
 		playerError += String(chunk);
@@ -682,27 +840,43 @@ async function streamFishPcmToFfplay(text: string, settings: NotificationSetting
 		player.once("exit", (code) => {
 			if (settled) return;
 			if (code === 0 || finished) settle();
-			else settle(new Error(`ffplay exited with code ${code}${playerError.trim() ? `: ${playerError.trim()}` : ""}`));
+			else
+				settle(
+					new Error(
+						`ffplay exited with code ${code}${playerError.trim() ? `: ${playerError.trim()}` : ""}`,
+					),
+				);
 		});
 		void createFishWebSocket(
 			apiKey,
 			settings.fish?.model ?? DEFAULT_FISH_MODEL,
 			(payload) => {
 				try {
-					const decoded = decodeMsgpack(payload) as { event?: string; audio?: Uint8Array; reason?: string; message?: string };
+					const decoded = decodeMsgpack(payload) as {
+						event?: string;
+						audio?: Uint8Array;
+						reason?: string;
+						message?: string;
+					};
 					if (decoded.event === "audio" && decoded.audio) {
 						player.stdin?.write(Buffer.from(decoded.audio));
 					} else if (decoded.event === "finish") {
 						finished = true;
 						player.stdin?.end();
-						if (decoded.reason === "error") settle(new Error(decoded.message || "Fish Audio streaming TTS failed."));
+						if (decoded.reason === "error")
+							settle(
+								new Error(
+									decoded.message || "Fish Audio streaming TTS failed.",
+								),
+							);
 					}
 				} catch (error) {
 					settle(error instanceof Error ? error : new Error(String(error)));
 				}
 			},
 			() => {
-				if (!finished) settle(new Error("Fish Audio WebSocket closed before finish."));
+				if (!finished)
+					settle(new Error("Fish Audio WebSocket closed before finish."));
 			},
 			(error) => settle(error),
 		)
@@ -712,7 +886,8 @@ async function streamFishPcmToFfplay(text: string, settings: NotificationSetting
 					event: "start",
 					request: {
 						text: "",
-						reference_id: settings.fish?.referenceId ?? DEFAULT_FISH_REFERENCE_ID,
+						reference_id:
+							settings.fish?.referenceId ?? DEFAULT_FISH_REFERENCE_ID,
 						format: "pcm",
 						sample_rate: FISH_STREAM_SAMPLE_RATE,
 						temperature: 0.7,
@@ -731,11 +906,15 @@ async function streamFishPcmToFfplay(text: string, settings: NotificationSetting
 				ws.send({ event: "flush" });
 				ws.send({ event: "stop" });
 			})
-			.catch((error) => settle(error instanceof Error ? error : new Error(String(error))));
+			.catch((error) =>
+				settle(error instanceof Error ? error : new Error(String(error))),
+			);
 	});
 }
 
-async function uploadVllmOmniVoice(settings: NotificationSettings): Promise<string> {
+async function uploadVllmOmniVoice(
+	settings: NotificationSettings,
+): Promise<string> {
 	const config = settings.vllmOmni ?? {};
 	const audioPath = config.audioPath?.trim();
 	if (!audioPath || !existsSync(audioPath)) {
@@ -758,7 +937,10 @@ async function uploadVllmOmniVoice(settings: NotificationSettings): Promise<stri
 	const appendField = (name: string, value: string) => {
 		body = Buffer.concat([
 			body,
-			Buffer.from(`${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}`, "utf-8"),
+			Buffer.from(
+				`${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}`,
+				"utf-8",
+			),
 		]);
 	};
 
@@ -768,7 +950,12 @@ async function uploadVllmOmniVoice(settings: NotificationSettings): Promise<stri
 
 	// Audio file part
 	const fileHeader = `${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="audio_sample"; filename="${audioName}"${CRLF}Content-Type: audio/wav${CRLF}${CRLF}`;
-	body = Buffer.concat([body, Buffer.from(fileHeader, "utf-8"), readAudio, Buffer.from(`${CRLF}--${boundary}--${CRLF}`, "utf-8")]);
+	body = Buffer.concat([
+		body,
+		Buffer.from(fileHeader, "utf-8"),
+		readAudio,
+		Buffer.from(`${CRLF}--${boundary}--${CRLF}`, "utf-8"),
+	]);
 
 	const response = await fetch(joinUrl(baseUrl, "v1/audio/voices"), {
 		method: "POST",
@@ -777,8 +964,13 @@ async function uploadVllmOmniVoice(settings: NotificationSettings): Promise<stri
 	});
 	await ensureOk(response);
 
-	const data = (await response.json()) as { voice?: { name?: string }; name?: string; error?: string };
-	if (data.error) throw new Error(`vLLM-Omni voice upload error: ${data.error}`);
+	const data = (await response.json()) as {
+		voice?: { name?: string };
+		name?: string;
+		error?: string;
+	};
+	if (data.error)
+		throw new Error(`vLLM-Omni voice upload error: ${data.error}`);
 	return data.voice?.name ?? data.name ?? voiceName;
 }
 
@@ -805,9 +997,13 @@ function createVllmOmniWebSocket(
 
 		const fail = (error: Error) => {
 			if (timeout) clearTimeout(timeout);
-			if (!settled) { settled = true; reject(error); }
-			else onError(error);
-			try { socket.destroy(); } catch {}
+			if (!settled) {
+				settled = true;
+				reject(error);
+			} else onError(error);
+			try {
+				socket.destroy();
+			} catch {}
 		};
 
 		const sendFrame = (payload: Uint8Array, opcode = 0x2) => {
@@ -837,8 +1033,14 @@ function createVllmOmniWebSocket(
 				if (buffer.length < offset + length) return;
 				const payload = buffer.subarray(offset, offset + length);
 				buffer = buffer.subarray(offset + length);
-				if (opcode === 0x8) { onClose(); return; }
-				if (opcode === 0x9) { sendFrame(payload, 0x0a); continue; }
+				if (opcode === 0x8) {
+					onClose();
+					return;
+				}
+				if (opcode === 0x9) {
+					sendFrame(payload, 0x0a);
+					continue;
+				}
 				if (opcode === 0x1 || opcode === 0x2 || opcode === 0x0) {
 					fragmented.push(Buffer.from(payload));
 					if (fin) {
@@ -855,7 +1057,10 @@ function createVllmOmniWebSocket(
 			}
 		};
 
-		timeout = setTimeout(() => fail(new Error("vLLM-Omni WebSocket connection timed out (30s)")), 30_000);
+		timeout = setTimeout(
+			() => fail(new Error("vLLM-Omni WebSocket connection timed out (30s)")),
+			30_000,
+		);
 
 		socket.on("connect", () => {
 			socket.write(
@@ -873,23 +1078,37 @@ function createVllmOmniWebSocket(
 		});
 
 		socket.on("data", (chunk) => {
-			buffer = Buffer.concat([buffer, typeof chunk === "string" ? Buffer.from(chunk) : chunk]);
+			buffer = Buffer.concat([
+				buffer,
+				typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+			]);
 			if (!handshakeDone) {
 				const headerEnd = buffer.indexOf("\r\n\r\n");
 				if (headerEnd === -1) return;
 				const headers = buffer.subarray(0, headerEnd).toString("utf-8");
 				buffer = buffer.subarray(headerEnd + 4);
-				if (!headers.startsWith("HTTP/1.1 101") && !headers.startsWith("HTTP/1.0 101")) {
-					fail(new Error(`vLLM-Omni WebSocket handshake failed: ${headers.split("\r\n")[0]}`));
+				if (
+					!headers.startsWith("HTTP/1.1 101") &&
+					!headers.startsWith("HTTP/1.0 101")
+				) {
+					fail(
+						new Error(
+							`vLLM-Omni WebSocket handshake failed: ${headers.split("\r\n")[0]}`,
+						),
+					);
 					return;
 				}
 				handshakeDone = true;
 				if (timeout) clearTimeout(timeout);
 				settled = true;
 				resolve({
-					send: (json: string) => sendFrame(new TextEncoder().encode(json), 0x1),
+					send: (json: string) =>
+						sendFrame(new TextEncoder().encode(json), 0x1),
 					close: () => {
-						try { sendFrame(new Uint8Array(), 0x8); socket.end(); } catch {}
+						try {
+							sendFrame(new Uint8Array(), 0x8);
+							socket.end();
+						} catch {}
 					},
 				});
 			}
@@ -897,11 +1116,17 @@ function createVllmOmniWebSocket(
 		});
 
 		socket.on("error", fail);
-		socket.on("close", () => { if (timeout) clearTimeout(timeout); onClose(); });
+		socket.on("close", () => {
+			if (timeout) clearTimeout(timeout);
+			onClose();
+		});
 	});
 }
 
-async function streamVllmOmniPcmToFfplay(text: string, settings: NotificationSettings): Promise<void> {
+async function streamVllmOmniPcmToFfplay(
+	text: string,
+	settings: NotificationSettings,
+): Promise<void> {
 	const config = settings.vllmOmni ?? {};
 	const baseUrl = getVllmOmniBaseUrl(settings);
 	const refText = readRefTextFromPath(config.refTextPath);
@@ -913,18 +1138,31 @@ async function streamVllmOmniPcmToFfplay(text: string, settings: NotificationSet
 	// Upload voice reference
 	const resolvedVoice = await uploadVllmOmniVoice(settings);
 
-	const player = spawn("ffplay", [
-		"-nodisp", "-autoexit", "-loglevel", "error",
-		"-f", "s16le",
-		"-ar", String(VLLM_OMNI_SAMPLE_RATE),
-		"-ac", "1",
-		"-i", "pipe:0",
-	], {
-		windowsHide: true,
-		stdio: ["pipe", "ignore", "pipe"],
-	});
+	const player = spawn(
+		"ffplay",
+		[
+			"-nodisp",
+			"-autoexit",
+			"-loglevel",
+			"error",
+			"-f",
+			"s16le",
+			"-ar",
+			String(VLLM_OMNI_SAMPLE_RATE),
+			"-ac",
+			"1",
+			"-i",
+			"pipe:0",
+		],
+		{
+			windowsHide: true,
+			stdio: ["pipe", "ignore", "pipe"],
+		},
+	);
 	let playerError = "";
-	player.stderr?.on("data", (chunk) => { playerError += String(chunk); });
+	player.stderr?.on("data", (chunk) => {
+		playerError += String(chunk);
+	});
 
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
@@ -934,8 +1172,12 @@ async function streamVllmOmniPcmToFfplay(text: string, settings: NotificationSet
 		const settle = (error?: Error) => {
 			if (settled) return;
 			settled = true;
-			try { ws?.close(); } catch {}
-			try { player.stdin?.end(); } catch {}
+			try {
+				ws?.close();
+			} catch {}
+			try {
+				player.stdin?.end();
+			} catch {}
 			if (error) reject(error);
 			else resolve();
 		};
@@ -944,7 +1186,12 @@ async function streamVllmOmniPcmToFfplay(text: string, settings: NotificationSet
 		player.once("exit", (code) => {
 			if (settled) return;
 			if (code === 0 || finished) settle();
-			else settle(new Error(`ffplay exited with code ${code}${playerError.trim() ? `: ${playerError.trim()}` : ""}`));
+			else
+				settle(
+					new Error(
+						`ffplay exited with code ${code}${playerError.trim() ? `: ${playerError.trim()}` : ""}`,
+					),
+				);
 		});
 
 		void createVllmOmniWebSocket(
@@ -966,7 +1213,11 @@ async function streamVllmOmniPcmToFfplay(text: string, settings: NotificationSet
 							finished = true;
 							player.stdin?.end();
 						} else if (etype === "error") {
-							settle(new Error(`vLLM-Omni server error: ${event.message ?? String(event)}`));
+							settle(
+								new Error(
+									`vLLM-Omni server error: ${event.message ?? String(event)}`,
+								),
+							);
 						}
 					} else {
 						// Binary audio frame — pipe to ffplay
@@ -977,25 +1228,32 @@ async function streamVllmOmniPcmToFfplay(text: string, settings: NotificationSet
 				}
 			},
 			() => {
-				if (!finished) settle(new Error("vLLM-Omni WebSocket closed before session.done."));
+				if (!finished)
+					settle(new Error("vLLM-Omni WebSocket closed before session.done."));
 			},
 			(error) => settle(error),
-		).then((socket) => {
-			ws = socket;
-			// 1. session.config (must be first)
-			ws.send(JSON.stringify({
-				type: "session.config",
-				voice: resolvedVoice,
-				ref_text: refText,
-				response_format: "pcm",
-				stream_audio: true,
-				max_new_tokens: maxNewTokens,
-			}));
-			// 2. input.text
-			ws.send(JSON.stringify({ type: "input.text", text }));
-			// 3. input.done
-			ws.send(JSON.stringify({ type: "input.done" }));
-		}).catch((error) => settle(error instanceof Error ? error : new Error(String(error))));
+		)
+			.then((socket) => {
+				ws = socket;
+				// 1. session.config (must be first)
+				ws.send(
+					JSON.stringify({
+						type: "session.config",
+						voice: resolvedVoice,
+						ref_text: refText,
+						response_format: "pcm",
+						stream_audio: true,
+						max_new_tokens: maxNewTokens,
+					}),
+				);
+				// 2. input.text
+				ws.send(JSON.stringify({ type: "input.text", text }));
+				// 3. input.done
+				ws.send(JSON.stringify({ type: "input.done" }));
+			})
+			.catch((error) =>
+				settle(error instanceof Error ? error : new Error(String(error))),
+			);
 	});
 }
 
@@ -1005,11 +1263,20 @@ function createWavHeader(sampleRate: number, numSamples: number): Uint8Array {
 	const header = new Uint8Array(44);
 	const view = new DataView(header.buffer);
 	// RIFF header
-	header[0] = 0x52; header[1] = 0x49; header[2] = 0x46; header[3] = 0x46; // "RIFF"
+	header[0] = 0x52;
+	header[1] = 0x49;
+	header[2] = 0x46;
+	header[3] = 0x46; // "RIFF"
 	view.setUint32(4, fileSize, false); // big-endian file size
-	header[8] = 0x57; header[9] = 0x41; header[10] = 0x56; header[11] = 0x45; // "WAVE"
+	header[8] = 0x57;
+	header[9] = 0x41;
+	header[10] = 0x56;
+	header[11] = 0x45; // "WAVE"
 	// fmt chunk
-	header[12] = 0x66; header[13] = 0x6d; header[14] = 0x74; header[15] = 0x20; // "fmt "
+	header[12] = 0x66;
+	header[13] = 0x6d;
+	header[14] = 0x74;
+	header[15] = 0x20; // "fmt "
 	view.setUint32(16, 16, true); // chunk size
 	view.setUint16(20, 1, true); // PCM
 	view.setUint16(22, 1, true); // mono
@@ -1018,12 +1285,18 @@ function createWavHeader(sampleRate: number, numSamples: number): Uint8Array {
 	view.setUint16(32, 2, true); // block align
 	view.setUint16(34, 16, true); // bits per sample
 	// data chunk
-	header[36] = 0x64; header[37] = 0x61; header[38] = 0x74; header[39] = 0x61; // "data"
+	header[36] = 0x64;
+	header[37] = 0x61;
+	header[38] = 0x74;
+	header[39] = 0x61; // "data"
 	view.setUint32(40, dataSize, true);
 	return header;
 }
 
-async function synthesizeVllmOmniWav(text: string, settings: NotificationSettings): Promise<Uint8Array> {
+async function synthesizeVllmOmniWav(
+	text: string,
+	settings: NotificationSettings,
+): Promise<Uint8Array> {
 	const config = settings.vllmOmni ?? {};
 	const baseUrl = getVllmOmniBaseUrl(settings);
 	const refText = readRefTextFromPath(config.refTextPath);
@@ -1044,7 +1317,9 @@ async function synthesizeVllmOmniWav(text: string, settings: NotificationSetting
 		const settle = (error?: Error) => {
 			if (settled) return;
 			settled = true;
-			try { ws?.close(); } catch {}
+			try {
+				ws?.close();
+			} catch {}
 			if (error) reject(error);
 			else resolve();
 		};
@@ -1066,7 +1341,11 @@ async function synthesizeVllmOmniWav(text: string, settings: NotificationSetting
 						if (etype === "session.done") {
 							settle();
 						} else if (etype === "error") {
-							settle(new Error(`vLLM-Omni server error: ${event.message ?? String(event)}`));
+							settle(
+								new Error(
+									`vLLM-Omni server error: ${event.message ?? String(event)}`,
+								),
+							);
 						}
 					} else {
 						pcmChunks.push(Buffer.from(raw));
@@ -1076,23 +1355,30 @@ async function synthesizeVllmOmniWav(text: string, settings: NotificationSetting
 				}
 			},
 			() => {
-				if (pcmChunks.length === 0) settle(new Error("vLLM-Omni WebSocket closed with no audio data."));
+				if (pcmChunks.length === 0)
+					settle(new Error("vLLM-Omni WebSocket closed with no audio data."));
 				else settle();
 			},
 			(error) => settle(error),
-		).then((socket) => {
-			ws = socket;
-			ws.send(JSON.stringify({
-				type: "session.config",
-				voice: resolvedVoice,
-				ref_text: refText,
-				response_format: "pcm",
-				stream_audio: true,
-				max_new_tokens: maxNewTokens,
-			}));
-			ws.send(JSON.stringify({ type: "input.text", text }));
-			ws.send(JSON.stringify({ type: "input.done" }));
-		}).catch((error) => settle(error instanceof Error ? error : new Error(String(error))));
+		)
+			.then((socket) => {
+				ws = socket;
+				ws.send(
+					JSON.stringify({
+						type: "session.config",
+						voice: resolvedVoice,
+						ref_text: refText,
+						response_format: "pcm",
+						stream_audio: true,
+						max_new_tokens: maxNewTokens,
+					}),
+				);
+				ws.send(JSON.stringify({ type: "input.text", text }));
+				ws.send(JSON.stringify({ type: "input.done" }));
+			})
+			.catch((error) =>
+				settle(error instanceof Error ? error : new Error(String(error))),
+			);
 	});
 
 	const pcmData = Buffer.concat(pcmChunks);
@@ -1105,7 +1391,10 @@ function joinUrl(baseUrl: string, path: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
-async function synthesizeOmniVoiceWav(text: string, settings: NotificationSettings): Promise<Uint8Array> {
+async function synthesizeOmniVoiceWav(
+	text: string,
+	settings: NotificationSettings,
+): Promise<Uint8Array> {
 	const baseUrl = getOmniVoiceBaseUrl(settings);
 	const profile = getOmniVoiceProfile(settings);
 
@@ -1123,27 +1412,41 @@ async function synthesizeOmniVoiceWav(text: string, settings: NotificationSettin
 	return new Uint8Array(await response.arrayBuffer());
 }
 
-async function synthesizeOpenAiCompatibleWav(text: string, settings: NotificationSettings): Promise<Uint8Array> {
+async function synthesizeOpenAiCompatibleWav(
+	text: string,
+	settings: NotificationSettings,
+): Promise<Uint8Array> {
 	const config = settings.openAiCompatible ?? {};
 	const apiKey = getOpenAiCompatibleApiKey(settings);
-	const headers: Record<string, string> = { "Content-Type": "application/json" };
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+	};
 	if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-	const response = await fetch(joinUrl(config.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL, "audio/speech"), {
-		method: "POST",
-		headers,
-		body: JSON.stringify({
-			model: config.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL,
-			voice: config.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE,
-			input: text,
-			response_format: "wav",
-		}),
-	});
+	const response = await fetch(
+		joinUrl(
+			config.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL,
+			"audio/speech",
+		),
+		{
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				model: config.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL,
+				voice: config.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE,
+				input: text,
+				response_format: "wav",
+			}),
+		},
+	);
 	await ensureOk(response);
 	return new Uint8Array(await response.arrayBuffer());
 }
 
-async function speakText(text: string, settings: NotificationSettings): Promise<void> {
+async function speakText(
+	text: string,
+	settings: NotificationSettings,
+): Promise<void> {
 	const cleaned = text.trim();
 	if (!cleaned) return;
 
@@ -1187,7 +1490,10 @@ $speak.Speak('${escapePowerShellSingleQuoted(cleaned)}');`);
 	}
 }
 
-async function synthesizeDiagnosticWav(text: string, settings: NotificationSettings): Promise<{ path: string; bytes: number }> {
+async function synthesizeDiagnosticWav(
+	text: string,
+	settings: NotificationSettings,
+): Promise<{ path: string; bytes: number }> {
 	const cleaned = text.trim();
 	if (!cleaned) throw new Error("No TTS text provided.");
 	let audioBytes: Uint8Array;
@@ -1221,20 +1527,24 @@ function stripMarkdownForSpeech(markdown: string): string {
 		.trim();
 
 	// Avoid reading common code-ish leftovers as one long token.
-	text = text.replace(/\b[a-zA-Z]:\\\S+/g, " ").replace(/\s+/g, " ").trim();
+	text = text
+		.replace(/\b[a-zA-Z]:\\\S+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 	return text;
 }
 
 /** Count approximate sentences using terminal punctuation (. ! ?). */
 function countSentences(text: string): number {
 	const matches = text.match(/[.!?]+\s+/g);
-	return matches ? matches.length : (text.trim().length > 0 ? 1 : 0);
+	return matches ? matches.length : text.trim().length > 0 ? 1 : 0;
 }
 
 function joinModelApiUrl(baseUrl: string, path: string): string {
 	const base = baseUrl.trim().replace(/\/+$/, "");
 	let suffix = path.startsWith("/") ? path : `/${path}`;
-	if (base.endsWith("/v1") && suffix.startsWith("/v1/")) suffix = suffix.slice(3);
+	if (base.endsWith("/v1") && suffix.startsWith("/v1/"))
+		suffix = suffix.slice(3);
 	return `${base}${suffix}`;
 }
 
@@ -1251,25 +1561,41 @@ function extractJwtAccountId(token: string): string {
 		if (!payload) throw new Error("missing payload");
 		const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
 		const json = Buffer.from(normalized, "base64").toString("utf-8");
-		const data = JSON.parse(json) as { "https://api.openai.com/auth"?: { chatgpt_account_id?: string } };
+		const data = JSON.parse(json) as {
+			"https://api.openai.com/auth"?: { chatgpt_account_id?: string };
+		};
 		const accountId = data["https://api.openai.com/auth"]?.chatgpt_account_id;
 		if (!accountId) throw new Error("missing chatgpt_account_id");
 		return accountId;
 	} catch (error) {
-		throw new Error(`Failed to extract ChatGPT account ID from Codex auth token: ${formatError(error)}`);
+		throw new Error(
+			`Failed to extract ChatGPT account ID from Codex auth token: ${formatError(error)}`,
+		);
 	}
 }
 
 type ResponseContentPart = { type?: string; text?: string };
-type ResponseOutputItem = { type?: string; role?: string; content?: ResponseContentPart[] };
+type ResponseOutputItem = {
+	type?: string;
+	role?: string;
+	content?: ResponseContentPart[];
+};
 
 function extractResponsesText(data: Record<string, unknown>): string {
 	if (typeof data.output_text === "string") return data.output_text;
 	const output = data.output as ResponseOutputItem[] | undefined;
-	const assistantItems = output?.filter((item) => item.role === "assistant" || item.type === "message") ?? [];
+	const assistantItems =
+		output?.filter(
+			(item) => item.role === "assistant" || item.type === "message",
+		) ?? [];
 	return assistantItems
 		.flatMap((item) => item.content ?? [])
-		.filter((part) => part.type === "output_text" || part.type === "message_content" || part.type === "text")
+		.filter(
+			(part) =>
+				part.type === "output_text" ||
+				part.type === "message_content" ||
+				part.type === "text",
+		)
 		.map((part) => part.text ?? "")
 		.join(" ")
 		.trim();
@@ -1284,8 +1610,17 @@ function htmlToShortDiagnostic(text: string): string {
 		.trim();
 }
 
-async function summarizeCodexText(text: string, model: { id: string; baseUrl: string; headers?: Record<string, string> }, auth: { apiKey?: string; headers?: Record<string, string> }, summarizerPrompt: string, maxSummaryTokens: number): Promise<string> {
-	if (!auth.apiKey) throw new Error("No OpenAI Codex auth token available. Run /login openai-codex or choose a non-Codex summarizer model.");
+async function summarizeCodexText(
+	text: string,
+	model: { id: string; baseUrl: string; headers?: Record<string, string> },
+	auth: { apiKey?: string; headers?: Record<string, string> },
+	summarizerPrompt: string,
+	maxSummaryTokens: number,
+): Promise<string> {
+	if (!auth.apiKey)
+		throw new Error(
+			"No OpenAI Codex auth token available. Run /login openai-codex or choose a non-Codex summarizer model.",
+		);
 	const accountId = extractJwtAccountId(auth.apiKey);
 	const headers: Record<string, string> = {
 		...model.headers,
@@ -1315,25 +1650,42 @@ async function summarizeCodexText(text: string, model: { id: string; baseUrl: st
 	});
 	if (!response.ok) {
 		const errText = await response.text().catch(() => "");
-		const preview = errText.trim().startsWith("<") ? htmlToShortDiagnostic(errText) : errText.trim();
-		throw new Error(`Summarizer HTTP ${response.status}: ${preview.slice(0, 300)}`);
+		const preview = errText.trim().startsWith("<")
+			? htmlToShortDiagnostic(errText)
+			: errText.trim();
+		throw new Error(
+			`Summarizer HTTP ${response.status}: ${preview.slice(0, 300)}`,
+		);
 	}
 	const raw = await response.text();
 	let deltaText = "";
 	let finalText = "";
 	for (const block of raw.split(/\n\n+/)) {
-		const dataText = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n").trim();
+		const dataText = block
+			.split("\n")
+			.filter((line) => line.startsWith("data:"))
+			.map((line) => line.slice(5).trim())
+			.join("\n")
+			.trim();
 		if (!dataText || dataText === "[DONE]") continue;
 		const event = JSON.parse(dataText) as Record<string, unknown>;
-		if (event.type === "error") throw new Error(`Codex summarizer error: ${String(event.message ?? event.code ?? dataText)}`);
+		if (event.type === "error")
+			throw new Error(
+				`Codex summarizer error: ${String(event.message ?? event.code ?? dataText)}`,
+			);
 		if (typeof event.delta === "string") deltaText += event.delta;
 		const responsePayload = event.response;
 		if (responsePayload && typeof responsePayload === "object") {
-			finalText = extractResponsesText(responsePayload as Record<string, unknown>) || finalText;
+			finalText =
+				extractResponsesText(responsePayload as Record<string, unknown>) ||
+				finalText;
 		}
 	}
 	const summary = (finalText || deltaText).trim();
-	if (!summary) throw new Error(`Codex summarizer returned empty response. Raw: ${raw.slice(0, 500)}`);
+	if (!summary)
+		throw new Error(
+			`Codex summarizer returned empty response. Raw: ${raw.slice(0, 500)}`,
+		);
 	return summary;
 }
 
@@ -1348,28 +1700,40 @@ async function summarizeText(
 ): Promise<string | null> {
 	const summarizer = settings.summarizer;
 	if (!summarizer?.provider || !summarizer?.modelId) {
-		notifyFailure(ctx, "Summarizer not configured. Select a model in the notification menu.");
+		notifyFailure(
+			ctx,
+			"Summarizer not configured. Select a model in the notification menu.",
+		);
 		return null;
 	}
 
 	const model = ctx.modelRegistry.find(summarizer.provider, summarizer.modelId);
 	if (!model) {
-		notifyFailure(ctx, `Summarizer model "${summarizer.provider}:${summarizer.modelId}" not found.`);
+		notifyFailure(
+			ctx,
+			`Summarizer model "${summarizer.provider}:${summarizer.modelId}" not found.`,
+		);
 		return null;
 	}
 
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model).catch((err: unknown) => ({ ok: false as const, error: String(err) }));
+	const auth = await ctx.modelRegistry
+		.getApiKeyAndHeaders(model)
+		.catch((err: unknown) => ({ ok: false as const, error: String(err) }));
 	if (!auth.ok) {
 		notifyFailure(ctx, `Summarizer auth failed: ${auth.error}`);
 		return null;
 	}
 
 	const baseUrl = model.baseUrl.replace(/\/+$/, "");
-	const headers: Record<string, string> = { "Content-Type": "application/json", ...auth.headers };
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+		...auth.headers,
+	};
 	if (auth.apiKey && !headers.Authorization && !headers["x-api-key"]) {
 		if (model.api === "anthropic-messages") {
 			headers["x-api-key"] = auth.apiKey;
-			headers["anthropic-version"] = headers["anthropic-version"] ?? "2023-06-01";
+			headers["anthropic-version"] =
+				headers["anthropic-version"] ?? "2023-06-01";
 		} else {
 			headers.Authorization = `Bearer ${auth.apiKey}`;
 		}
@@ -1386,7 +1750,13 @@ async function summarizeText(
 
 	if (model.api === "openai-codex-responses") {
 		try {
-			return await summarizeCodexText(text, model, auth, summarizerPrompt, maxSummaryTokens);
+			return await summarizeCodexText(
+				text,
+				model,
+				auth,
+				summarizerPrompt,
+				maxSummaryTokens,
+			);
 		} catch (error) {
 			notifyFailure(ctx, formatError(error));
 			return null;
@@ -1407,7 +1777,10 @@ async function summarizeText(
 			return JSON.stringify({
 				model: model.id,
 				input: [
-					{ role: "system", content: [{ type: "input_text", text: summarizerPrompt }] },
+					{
+						role: "system",
+						content: [{ type: "input_text", text: summarizerPrompt }],
+					},
 					{ role: "user", content: [{ type: "input_text", text }] },
 				],
 				max_output_tokens: maxSummaryTokens,
@@ -1426,8 +1799,10 @@ async function summarizeText(
 
 	const url = (() => {
 		const api = model.api;
-		if (api === "anthropic-messages") return joinModelApiUrl(baseUrl, "/v1/messages");
-		if (api === "openai-responses" || api === "azure-openai-responses") return joinModelApiUrl(baseUrl, "/v1/responses");
+		if (api === "anthropic-messages")
+			return joinModelApiUrl(baseUrl, "/v1/messages");
+		if (api === "openai-responses" || api === "azure-openai-responses")
+			return joinModelApiUrl(baseUrl, "/v1/responses");
 		return joinModelApiUrl(baseUrl, "/v1/chat/completions");
 	})();
 
@@ -1440,7 +1815,10 @@ async function summarizeText(
 
 	if (!response.ok) {
 		const errText = await response.text().catch(() => "");
-		notifyFailure(ctx, `Summarizer HTTP ${response.status}: ${errText.slice(0, 300)}`);
+		notifyFailure(
+			ctx,
+			`Summarizer HTTP ${response.status}: ${errText.slice(0, 300)}`,
+		);
 		return null;
 	}
 
@@ -1449,23 +1827,44 @@ async function summarizeText(
 	// Extract text from Anthropic or OpenAI-style response
 	const content = (() => {
 		if (model.api === "anthropic-messages") {
-			const contentArr = (data.content as Array<{ type?: string; text?: string }>) ?? [];
-			return contentArr.filter((c) => c.type === "text").map((c) => c.text ?? "").join(" ");
+			const contentArr =
+				(data.content as Array<{ type?: string; text?: string }>) ?? [];
+			return contentArr
+				.filter((c) => c.type === "text")
+				.map((c) => c.text ?? "")
+				.join(" ");
 		}
-		if (model.api === "openai-responses" || model.api === "azure-openai-responses") {
+		if (
+			model.api === "openai-responses" ||
+			model.api === "azure-openai-responses"
+		) {
 			return extractResponsesText(data);
 		}
-		const choice = (data.choices as Array<{ finish_reason?: string; message?: { content?: string; reasoning_content?: string } }>)?.[0];
+		const choice = (
+			data.choices as Array<{
+				finish_reason?: string;
+				message?: { content?: string; reasoning_content?: string };
+			}>
+		)?.[0];
 		const message = choice?.message;
-		if (!message?.content && choice?.finish_reason === "length" && message?.reasoning_content) {
-			console.error(`[notification] Summarizer exhausted output budget in reasoning for ${model.provider}:${model.id}.`);
+		if (
+			!message?.content &&
+			choice?.finish_reason === "length" &&
+			message?.reasoning_content
+		) {
+			console.error(
+				`[notification] Summarizer exhausted output budget in reasoning for ${model.provider}:${model.id}.`,
+			);
 		}
 		return message?.content ?? "";
 	})();
 
 	if (!content.trim()) {
 		const rawPreview = JSON.stringify(data).slice(0, 500);
-		notifyFailure(ctx, `Summarizer returned empty response. Model API: ${model.api}. Raw: ${rawPreview}`);
+		notifyFailure(
+			ctx,
+			`Summarizer returned empty response. Model API: ${model.api}. Raw: ${rawPreview}`,
+		);
 		return null;
 	}
 
@@ -1477,7 +1876,12 @@ function getAssistantText(message: unknown): string {
 	if (!Array.isArray(content)) return "";
 	return content
 		.filter((part): part is { type: string; text: string } => {
-			return Boolean(part && typeof part === "object" && (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string");
+			return Boolean(
+				part &&
+					typeof part === "object" &&
+					(part as { type?: unknown }).type === "text" &&
+					typeof (part as { text?: unknown }).text === "string",
+			);
 		})
 		.map((part) => part.text)
 		.join("\n");
@@ -1485,7 +1889,15 @@ function getAssistantText(message: unknown): string {
 
 function hasToolCall(message: unknown): boolean {
 	const content = (message as { content?: unknown }).content;
-	return Array.isArray(content) && content.some((part) => part && typeof part === "object" && (part as { type?: unknown }).type === "toolCall");
+	return (
+		Array.isArray(content) &&
+		content.some(
+			(part) =>
+				part &&
+				typeof part === "object" &&
+				(part as { type?: unknown }).type === "toolCall",
+		)
+	);
 }
 
 function updateStatus(ctx: ExtensionContext, mode: NotificationMode): void {
@@ -1567,7 +1979,10 @@ class TtsQueue {
 				try {
 					await speakText(next, this.getSettings());
 				} catch (error) {
-					notifyFailure(this.ctx, `TTS notification failed: ${formatError(error)}`);
+					notifyFailure(
+						this.ctx,
+						`TTS notification failed: ${formatError(error)}`,
+					);
 				}
 			}
 			// All items done — signal emote to stop talking.
@@ -1588,11 +2003,22 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	const tts = new TtsQueue(() => settings);
 	tts.setEvents(pi.events);
 
-	pi.registerMessageRenderer(SUMMARY_MESSAGE_TYPE, (message: { content?: unknown }, _options: unknown, theme: any) => {
-		const box = new Box(1, 1, (text: string) => theme.bg("customMessageBg", text));
-		box.addChild(new Text(theme.fg("dim", `TTS summary: ${String(message.content ?? "")}`), 0, 0));
-		return box;
-	});
+	pi.registerMessageRenderer(
+		SUMMARY_MESSAGE_TYPE,
+		(message: { content?: unknown }, _options: unknown, theme: any) => {
+			const box = new Box(1, 1, (text: string) =>
+				theme.bg("customMessageBg", text),
+			);
+			box.addChild(
+				new Text(
+					theme.fg("dim", `TTS summary: ${String(message.content ?? "")}`),
+					0,
+					0,
+				),
+			);
+			return box;
+		},
+	);
 
 	pi.registerFlag("notification", {
 		description: "Notification mode: off, beep, tts, or both",
@@ -1605,7 +2031,10 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		try {
 			saveSettings(settings);
 		} catch (error) {
-			notifyFailure(ctx, `Failed to save notification setting: ${formatError(error)}`);
+			notifyFailure(
+				ctx,
+				`Failed to save notification setting: ${formatError(error)}`,
+			);
 		}
 		if (ctx) updateStatus(ctx, mode);
 	}
@@ -1616,12 +2045,17 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		pi.events.emit("tts:mode", { mode: nextMode });
 	}
 
-	async function enqueueTtsOutput(text: string, ctx: ExtensionContext): Promise<void> {
+	async function enqueueTtsOutput(
+		text: string,
+		ctx: ExtensionContext,
+	): Promise<void> {
 		let ttsText = text;
 		if (settings.ttsOutputMode === "shortened") {
 			try {
 				const cleaned = stripMarkdownForSpeech(text);
-				const threshold = settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
+				const threshold =
+					settings.summarizer?.skipThreshold ??
+					DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
 				if (countSentences(cleaned) > threshold) {
 					const summary = await summarizeText(cleaned, settings, ctx);
 					if (summary === null) return; // error already shown, skip TTS
@@ -1642,12 +2076,16 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	}
 
 	pi.events.on("notification:force-next", (data: unknown) => {
-		const source = typeof data === "object" && data !== null ? (data as { source?: unknown }).source : undefined;
+		const source =
+			typeof data === "object" && data !== null
+				? (data as { source?: unknown }).source
+				: undefined;
 		if (source === "voice-input") forceNextAgentNotification = true;
 	});
 
 	pi.on("input", async (event) => {
-		nextAgentIsInteractive = event.source === "interactive" || forceNextAgentNotification;
+		nextAgentIsInteractive =
+			event.source === "interactive" || forceNextAgentNotification;
 		forceNextAgentNotification = false;
 	});
 
@@ -1698,7 +2136,10 @@ export default function notificationExtension(pi: ExtensionAPI) {
 			if (isNotificationMode(normalized)) {
 				setMode(normalized, ctx);
 			} else {
-				ctx.ui.notify(`Unknown notification mode "${flag}". Use: ${MODES.join(", ")}`, "warning");
+				ctx.ui.notify(
+					`Unknown notification mode "${flag}". Use: ${MODES.join(", ")}`,
+					"warning",
+				);
 			}
 		}
 		updateStatus(ctx, mode);
@@ -1713,14 +2154,19 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		const currentEngine = settings.ttsEngine ?? "fish";
 		const fishRef = settings.fish?.referenceId ?? DEFAULT_FISH_REFERENCE_ID;
 		const fishModel = settings.fish?.model ?? DEFAULT_FISH_MODEL;
-		const oaUrl = settings.openAiCompatible?.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
-		const oaModel = settings.openAiCompatible?.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL;
-		const oaVoice = settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE;
+		const oaUrl =
+			settings.openAiCompatible?.baseUrl ?? DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
+		const oaModel =
+			settings.openAiCompatible?.model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL;
+		const oaVoice =
+			settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE;
 		const currentOutputMode = settings.ttsOutputMode ?? DEFAULT_TTS_OUTPUT_MODE;
-		const summarizerModelLabel = settings.summarizer?.provider && settings.summarizer?.modelId
-			? `${settings.summarizer.provider}:${settings.summarizer.modelId}`
-			: "not set";
-		const summarizerThreshold = settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
+		const summarizerModelLabel =
+			settings.summarizer?.provider && settings.summarizer?.modelId
+				? `${settings.summarizer.provider}:${settings.summarizer.modelId}`
+				: "not set";
+		const summarizerThreshold =
+			settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
 
 		return [
 			{
@@ -1745,66 +2191,190 @@ export default function notificationExtension(pi: ExtensionAPI) {
 						label: currentEngine === "fish" ? "▸ fish (current)" : "fish",
 						children: () => [
 							{ type: "action", id: "engine-set:fish", label: "Select fish" },
-							{ type: "input", id: "fish:set-key", label: "Set API key", prompt: "Fish Audio API key:", isSecret: true, currentValue: getFishApiKey(settings) ? "••••••••" : "not set" },
+							{
+								type: "input",
+								id: "fish:set-key",
+								label: "Set API key",
+								prompt: "Fish Audio API key:",
+								isSecret: true,
+								currentValue: getFishApiKey(settings) ? "••••••••" : "not set",
+							},
 							{ type: "action", id: "fish:clear-key", label: "Clear API key" },
-							{ type: "input", id: "fish:set-reference", label: "Set reference ID", prompt: "Fish Audio reference_id:", currentValue: fishRef },
-							{ type: "input", id: "fish:set-model", label: "Set model", prompt: "Fish Audio model:", currentValue: fishModel },
+							{
+								type: "input",
+								id: "fish:set-reference",
+								label: "Set reference ID",
+								prompt: "Fish Audio reference_id:",
+								currentValue: fishRef,
+							},
+							{
+								type: "input",
+								id: "fish:set-model",
+								label: "Set model",
+								prompt: "Fish Audio model:",
+								currentValue: fishModel,
+							},
 						],
 					},
 					{
 						type: "submenu",
 						id: "engine:openai",
-						label: currentEngine === "openai-compatible" ? "▸ openai-compatible (current)" : "openai-compatible",
+						label:
+							currentEngine === "openai-compatible"
+								? "▸ openai-compatible (current)"
+								: "openai-compatible",
 						children: () => [
-							{ type: "action", id: "engine-set:openai-compatible", label: "Select openai-compatible" },
-							{ type: "input", id: "openai:set-key", label: "Set API key", prompt: "OpenAI-compatible API key:", isSecret: true, currentValue: getOpenAiCompatibleApiKey(settings) ? "••••••••" : "not set" },
-							{ type: "action", id: "openai:clear-key", label: "Clear API key" },
-							{ type: "input", id: "openai:set-url", label: "Set base URL", prompt: "OpenAI-compatible base URL:", currentValue: oaUrl },
-							{ type: "input", id: "openai:set-model", label: "Set model", prompt: "OpenAI-compatible model:", currentValue: oaModel },
-							{ type: "input", id: "openai:set-voice", label: "Set voice", prompt: "OpenAI-compatible voice:", currentValue: oaVoice },
+							{
+								type: "action",
+								id: "engine-set:openai-compatible",
+								label: "Select openai-compatible",
+							},
+							{
+								type: "input",
+								id: "openai:set-key",
+								label: "Set API key",
+								prompt: "OpenAI-compatible API key:",
+								isSecret: true,
+								currentValue: getOpenAiCompatibleApiKey(settings)
+									? "••••••••"
+									: "not set",
+							},
+							{
+								type: "action",
+								id: "openai:clear-key",
+								label: "Clear API key",
+							},
+							{
+								type: "input",
+								id: "openai:set-url",
+								label: "Set base URL",
+								prompt: "OpenAI-compatible base URL:",
+								currentValue: oaUrl,
+							},
+							{
+								type: "input",
+								id: "openai:set-model",
+								label: "Set model",
+								prompt: "OpenAI-compatible model:",
+								currentValue: oaModel,
+							},
+							{
+								type: "input",
+								id: "openai:set-voice",
+								label: "Set voice",
+								prompt: "OpenAI-compatible voice:",
+								currentValue: oaVoice,
+							},
 						],
 					},
 					{
 						type: "submenu",
 						id: "engine:windows",
-						label: currentEngine === "windows-native" ? "▸ windows-native (current)" : "windows-native",
+						label:
+							currentEngine === "windows-native"
+								? "▸ windows-native (current)"
+								: "windows-native",
 						children: () => [
-							{ type: "action", id: "engine-set:windows-native", label: "Select windows-native" },
+							{
+								type: "action",
+								id: "engine-set:windows-native",
+								label: "Select windows-native",
+							},
 						],
 					},
 					{
 						type: "submenu",
 						id: "engine:omnivoice",
-						label: currentEngine === "omnivoice" ? "▸ omnivoice (current)" : "omnivoice",
+						label:
+							currentEngine === "omnivoice"
+								? "▸ omnivoice (current)"
+								: "omnivoice",
 						children: () => {
 							const omniProfile = getOmniVoiceProfile(settings);
 							const omniUrl = getOmniVoiceBaseUrl(settings);
 							return [
-								{ type: "action", id: "engine-set:omnivoice", label: "Select omnivoice" },
-								{ type: "input", id: "omnivoice:set-url", label: "Set base URL", prompt: "OmniVoice base URL:", currentValue: omniUrl },
-								{ type: "input", id: "omnivoice:set-profile", label: "Set profile", prompt: "OmniVoice profile (voice name):", currentValue: omniProfile },
-								{ type: "action", id: "omnivoice:test-connection", label: "Test server connection" },
-								{ type: "action", id: "omnivoice:test-tts", label: "Test TTS playback" },
+								{
+									type: "action",
+									id: "engine-set:omnivoice",
+									label: "Select omnivoice",
+								},
+								{
+									type: "input",
+									id: "omnivoice:set-url",
+									label: "Set base URL",
+									prompt: "OmniVoice base URL:",
+									currentValue: omniUrl,
+								},
+								{
+									type: "input",
+									id: "omnivoice:set-profile",
+									label: "Set profile",
+									prompt: "OmniVoice profile (voice name):",
+									currentValue: omniProfile,
+								},
+								{
+									type: "action",
+									id: "omnivoice:test-connection",
+									label: "Test server connection",
+								},
+								{
+									type: "action",
+									id: "omnivoice:test-tts",
+									label: "Test TTS playback",
+								},
 							];
 						},
 					},
 					{
 						type: "submenu",
 						id: "engine:vllm",
-						label: currentEngine === "vllm-omni" ? "▸ vllm-omni (current)" : "vllm-omni",
+						label:
+							currentEngine === "vllm-omni"
+								? "▸ vllm-omni (current)"
+								: "vllm-omni",
 						children: () => {
 							const vllmAudio = settings.vllmOmni?.audioPath;
 							const vllmRefTextPath = settings.vllmOmni?.refTextPath;
 							const vllmCached = settings.vllmOmni?.voiceCached;
-							const vllmAudioLabel = vllmAudio ? vllmAudio.split(/[/\\]/).pop() : "not set";
-							const vllmRefLabel = vllmRefTextPath ? vllmRefTextPath.split(/[/\\]/).pop() : "not set";
+							const vllmAudioLabel = vllmAudio
+								? vllmAudio.split(/[/\\]/).pop()
+								: "not set";
+							const vllmRefLabel = vllmRefTextPath
+								? vllmRefTextPath.split(/[/\\]/).pop()
+								: "not set";
 							return [
-								{ type: "action", id: "engine-set:vllm-omni", label: "Select vllm-omni" },
-								{ type: "action", id: "vllm:browse-audio", label: `Browse audio (.wav)  (${vllmAudioLabel})` },
-								{ type: "action", id: "vllm:browse-reftext", label: `Browse transcript (.txt)  (${vllmRefLabel})` },
-								{ type: "action", id: "vllm:test-connection", label: "Test server connection" },
-								{ type: "action", id: "vllm:upload-voice", label: vllmCached ? "Re-upload voice to server" : "Upload & cache voice on server" },
-								{ type: "action", id: "vllm:test-tts", label: "Test TTS playback" },
+								{
+									type: "action",
+									id: "engine-set:vllm-omni",
+									label: "Select vllm-omni",
+								},
+								{
+									type: "action",
+									id: "vllm:browse-audio",
+									label: `Browse audio (.wav)  (${vllmAudioLabel})`,
+								},
+								{
+									type: "action",
+									id: "vllm:browse-reftext",
+									label: `Browse transcript (.txt)  (${vllmRefLabel})`,
+								},
+								{
+									type: "action",
+									id: "vllm:test-connection",
+									label: "Test server connection",
+								},
+								{
+									type: "action",
+									id: "vllm:upload-voice",
+									label: vllmCached
+										? "Re-upload voice to server"
+										: "Upload & cache voice on server",
+								},
+								{
+									type: "action",
+									id: "vllm:test-tts",
+									label: "Test TTS playback",
+								},
 							];
 						},
 					},
@@ -1831,10 +2401,20 @@ export default function notificationExtension(pi: ExtensionAPI) {
 						id: "summarizer:select-model",
 						label: `Select summarizer model  (${summarizerModelLabel})`,
 						children: () => {
-							const models = getCurrentCtx()?.modelRegistry.getAvailable() ?? [];
-							if (models.length === 0) return [{ type: "action" as const, id: "summarizer:no-models", label: "No authenticated models available" }];
+							const models =
+								getCurrentCtx()?.modelRegistry.getAvailable() ?? [];
+							if (models.length === 0)
+								return [
+									{
+										type: "action" as const,
+										id: "summarizer:no-models",
+										label: "No authenticated models available",
+									},
+								];
 							return models.map((m: any) => {
-								const selected = settings.summarizer?.provider === m.provider && settings.summarizer?.modelId === m.id;
+								const selected =
+									settings.summarizer?.provider === m.provider &&
+									settings.summarizer?.modelId === m.id;
 								return {
 									type: "action" as const,
 									id: `summarizer-model:${encodeURIComponent(m.provider)}:${encodeURIComponent(m.id)}`,
@@ -1924,21 +2504,30 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		// OpenAI-compatible config
 		if (id === "openai:set-key") {
 			if (value && value !== "••••••••" && value !== "not set") {
-				settings.openAiCompatible = { ...settings.openAiCompatible, apiKey: value };
+				settings.openAiCompatible = {
+					...settings.openAiCompatible,
+					apiKey: value,
+				};
 				persistSettings(ctx);
 				if (ctx) ctx.ui.notify("OpenAI-compatible API key saved", "info");
 			}
 			return;
 		}
 		if (id === "openai:clear-key") {
-			settings.openAiCompatible = { ...settings.openAiCompatible, apiKey: undefined };
+			settings.openAiCompatible = {
+				...settings.openAiCompatible,
+				apiKey: undefined,
+			};
 			persistSettings(ctx);
 			if (ctx) ctx.ui.notify("OpenAI-compatible API key cleared", "info");
 			return;
 		}
 		if (id === "openai:set-url") {
 			if (value) {
-				settings.openAiCompatible = { ...settings.openAiCompatible, baseUrl: value };
+				settings.openAiCompatible = {
+					...settings.openAiCompatible,
+					baseUrl: value,
+				};
 				persistSettings(ctx);
 				if (ctx) ctx.ui.notify("OpenAI-compatible base URL updated", "info");
 			}
@@ -1946,7 +2535,10 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		}
 		if (id === "openai:set-model") {
 			if (value) {
-				settings.openAiCompatible = { ...settings.openAiCompatible, model: value };
+				settings.openAiCompatible = {
+					...settings.openAiCompatible,
+					model: value,
+				};
 				persistSettings(ctx);
 				if (ctx) ctx.ui.notify("OpenAI-compatible model updated", "info");
 			}
@@ -1954,7 +2546,10 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		}
 		if (id === "openai:set-voice") {
 			if (value) {
-				settings.openAiCompatible = { ...settings.openAiCompatible, voice: value };
+				settings.openAiCompatible = {
+					...settings.openAiCompatible,
+					voice: value,
+				};
 				persistSettings(ctx);
 				if (ctx) ctx.ui.notify("OpenAI-compatible voice updated", "info");
 			}
@@ -1964,61 +2559,99 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		// vLLM-Omni config
 		if (id === "vllm:browse-audio") {
 			if (process.platform !== "win32") {
-				if (ctx) ctx.ui.notify("File browser requires Windows. Paste the path manually.", "warning");
+				if (ctx)
+					ctx.ui.notify(
+						"File browser requires Windows. Paste the path manually.",
+						"warning",
+					);
 				return;
 			}
 			const result = await new Promise<string | null>((resolve) => {
-				execFile("powershell.exe", [
-					"-NoProfile", "-NonInteractive", "-Command",
-					`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null;
+				execFile(
+					"powershell.exe",
+					[
+						"-NoProfile",
+						"-NonInteractive",
+						"-Command",
+						`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null;
 $dlg = New-Object System.Windows.Forms.OpenFileDialog;
 $dlg.Filter = 'Wave files (*.wav)|*.wav|All files (*.*)|*.*';
 $dlg.Title = 'Select reference audio file';
 $result = $dlg.ShowDialog();
 if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
-				], { windowsHide: true }, (error, stdout, stderr) => {
-					if (error) {
-						if (ctx) ctx.ui.notify(`File browser error: ${stderr.trim() || error.message}`, "error");
-						resolve(null);
-					} else {
-						resolve(stdout.trim() || null);
-					}
-				});
+					],
+					{ windowsHide: true },
+					(error, stdout, stderr) => {
+						if (error) {
+							if (ctx)
+								ctx.ui.notify(
+									`File browser error: ${stderr.trim() || error.message}`,
+									"error",
+								);
+							resolve(null);
+						} else {
+							resolve(stdout.trim() || null);
+						}
+					},
+				);
 			});
 			if (result) {
 				settings.vllmOmni = { ...settings.vllmOmni, audioPath: result };
 				persistSettings(ctx);
-				if (ctx) ctx.ui.notify(`Audio reference set: ${result.split(/[/\\]/).pop()}`, "info");
+				if (ctx)
+					ctx.ui.notify(
+						`Audio reference set: ${result.split(/[/\\]/).pop()}`,
+						"info",
+					);
 			}
 			return;
 		}
 		if (id === "vllm:browse-reftext") {
 			if (process.platform !== "win32") {
-				if (ctx) ctx.ui.notify("File browser requires Windows. Paste the path manually.", "warning");
+				if (ctx)
+					ctx.ui.notify(
+						"File browser requires Windows. Paste the path manually.",
+						"warning",
+					);
 				return;
 			}
 			const result = await new Promise<string | null>((resolve) => {
-				execFile("powershell.exe", [
-					"-NoProfile", "-NonInteractive", "-Command",
-					`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null;
+				execFile(
+					"powershell.exe",
+					[
+						"-NoProfile",
+						"-NonInteractive",
+						"-Command",
+						`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null;
 $dlg = New-Object System.Windows.Forms.OpenFileDialog;
 $dlg.Filter = 'Text files (*.txt)|*.txt|All files (*.*)|*.*';
 $dlg.Title = 'Select transcript file';
 $result = $dlg.ShowDialog();
 if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
-				], { windowsHide: true }, (error, stdout, stderr) => {
-					if (error) {
-						if (ctx) ctx.ui.notify(`File browser error: ${stderr.trim() || error.message}`, "error");
-						resolve(null);
-					} else {
-						resolve(stdout.trim() || null);
-					}
-				});
+					],
+					{ windowsHide: true },
+					(error, stdout, stderr) => {
+						if (error) {
+							if (ctx)
+								ctx.ui.notify(
+									`File browser error: ${stderr.trim() || error.message}`,
+									"error",
+								);
+							resolve(null);
+						} else {
+							resolve(stdout.trim() || null);
+						}
+					},
+				);
 			});
 			if (result) {
 				settings.vllmOmni = { ...settings.vllmOmni, refTextPath: result };
 				persistSettings(ctx);
-				if (ctx) ctx.ui.notify(`Transcript set: ${result.split(/[/\\]/).pop()}`, "info");
+				if (ctx)
+					ctx.ui.notify(
+						`Transcript set: ${result.split(/[/\\]/).pop()}`,
+						"info",
+					);
 			}
 			return;
 		}
@@ -2026,20 +2659,33 @@ if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
 			const baseUrl = getVllmOmniBaseUrl(settings);
 			try {
 				if (ctx) ctx.ui.notify(`Pinging ${baseUrl}/health...`, "info");
-				const res = await fetch(joinUrl(baseUrl, "health"), { signal: AbortSignal.timeout(5000) });
+				const res = await fetch(joinUrl(baseUrl, "health"), {
+					signal: AbortSignal.timeout(5000),
+				});
 				if (res.ok) {
 					if (ctx) ctx.ui.notify(`Server is reachable at ${baseUrl}`, "info");
 				} else {
-					if (ctx) ctx.ui.notify(`Server responded with status ${res.status}`, "warning");
+					if (ctx)
+						ctx.ui.notify(
+							`Server responded with status ${res.status}`,
+							"warning",
+						);
 				}
 			} catch (error) {
-				notifyFailure(ctx, `Cannot reach server at ${baseUrl}: ${formatError(error)}`);
+				notifyFailure(
+					ctx,
+					`Cannot reach server at ${baseUrl}: ${formatError(error)}`,
+				);
 			}
 			return;
 		}
 		if (id === "vllm:upload-voice") {
-			if (!settings.vllmOmni?.audioPath || !existsSync(settings.vllmOmni.audioPath)) {
-				if (ctx) ctx.ui.notify("Browse and select an audio file first.", "warning");
+			if (
+				!settings.vllmOmni?.audioPath ||
+				!existsSync(settings.vllmOmni.audioPath)
+			) {
+				if (ctx)
+					ctx.ui.notify("Browse and select an audio file first.", "warning");
 				return;
 			}
 			try {
@@ -2047,15 +2693,26 @@ if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
 				const voice = await uploadVllmOmniVoice(settings);
 				settings.vllmOmni = { ...settings.vllmOmni, voiceCached: true };
 				persistSettings(ctx);
-				if (ctx) ctx.ui.notify(`Voice "${voice}" uploaded and cached on server.`, "info");
+				if (ctx)
+					ctx.ui.notify(
+						`Voice "${voice}" uploaded and cached on server.`,
+						"info",
+					);
 			} catch (error) {
 				notifyFailure(ctx, `Upload failed: ${formatError(error)}`);
 			}
 			return;
 		}
 		if (id === "vllm:test-tts") {
-			if (!settings.vllmOmni?.audioPath || !existsSync(settings.vllmOmni.audioPath)) {
-				if (ctx) ctx.ui.notify("Browse and select an audio file, then upload voice first.", "warning");
+			if (
+				!settings.vllmOmni?.audioPath ||
+				!existsSync(settings.vllmOmni.audioPath)
+			) {
+				if (ctx)
+					ctx.ui.notify(
+						"Browse and select an audio file, then upload voice first.",
+						"warning",
+					);
 				return;
 			}
 			const text = "This is a test of the vLLM Omni TTS engine.";
@@ -2088,21 +2745,37 @@ if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
 		}
 		if (id === "omnivoice:test-connection") {
 			const baseUrl = getOmniVoiceBaseUrl(settings);
+			// Strip /v1 suffix — Omnivoice health is at root, not under /v1
+			const healthUrl = baseUrl.replace(/\/v1$/, "") + "/health";
 			try {
-				if (ctx) ctx.ui.notify(`Pinging ${baseUrl}/health...`, "info");
-				const res = await fetch(joinUrl(baseUrl, "health"), { signal: AbortSignal.timeout(5000) });
+				if (ctx) ctx.ui.notify(`Pinging ${healthUrl}...`, "info");
+				const res = await fetch(healthUrl, {
+					signal: AbortSignal.timeout(5000),
+				});
 				if (res.ok) {
-					if (ctx) ctx.ui.notify(`OmniVoice server is reachable at ${baseUrl}`, "info");
+					if (ctx)
+						ctx.ui.notify(
+							`OmniVoice server is reachable at ${baseUrl}`,
+							"info",
+						);
 				} else {
-					if (ctx) ctx.ui.notify(`Server responded with status ${res.status}`, "warning");
+					if (ctx)
+						ctx.ui.notify(
+							`Server responded with status ${res.status}`,
+							"warning",
+						);
 				}
 			} catch (error) {
-				notifyFailure(ctx, `Cannot reach OmniVoice server at ${baseUrl}: ${formatError(error)}`);
+				notifyFailure(
+					ctx,
+					`Cannot reach OmniVoice server at ${baseUrl}: ${formatError(error)}`,
+				);
 			}
 			return;
 		}
 		if (id === "omnivoice:test-tts") {
-			const text = "Xin chào anh, em là MeiLin. Đây là giọng nói OmniVoice Nu-01-Mai.";
+			const text =
+				"Xin chào anh, em là MeiLin. Đây là giọng nói OmniVoice Nu-01-Mai.";
 			try {
 				if (ctx) ctx.ui.notify("Testing OmniVoice TTS...", "info");
 				const bytes = await synthesizeOmniVoiceWav(text, settings);
@@ -2133,23 +2806,41 @@ if ($result -eq 'OK') { echo $dlg.FileName; } else { echo '' };`,
 			const text = "This is a notification TTS test.";
 			let diagnostic: { path: string; bytes: number } | undefined;
 			try {
-				if (ctx) ctx.ui.notify(`Testing ${settings.ttsEngine ?? "fish"} TTS...`, "info");
+				if (ctx)
+					ctx.ui.notify(
+						`Testing ${settings.ttsEngine ?? "fish"} TTS...`,
+						"info",
+					);
 				if (settings.ttsEngine === "windows-native") {
-					if (process.platform !== "win32") throw new Error("Windows Native TTS is only available on Windows.");
+					if (process.platform !== "win32")
+						throw new Error("Windows Native TTS is only available on Windows.");
 					await runPowerShell(`Add-Type -AssemblyName System.Speech;
 $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;
 $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 				} else if (settings.ttsEngine === "openai-compatible") {
 					diagnostic = await synthesizeDiagnosticWav(text, settings);
-					if (ctx) ctx.ui.notify(`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`, "info");
+					if (ctx)
+						ctx.ui.notify(
+							`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`,
+							"info",
+						);
 					await playTtsWav(diagnostic.path);
 				} else if (settings.ttsEngine === "vllm-omni") {
-					if (ctx) ctx.ui.notify("Connecting to vLLM-Omni WebSocket TTS...", "info");
+					if (ctx)
+						ctx.ui.notify("Connecting to vLLM-Omni WebSocket TTS...", "info");
 					diagnostic = await synthesizeDiagnosticWav(text, settings);
-					if (ctx) ctx.ui.notify(`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`, "info");
+					if (ctx)
+						ctx.ui.notify(
+							`TTS WAV received: ${diagnostic.bytes} bytes. Playing...`,
+							"info",
+						);
 					await playTtsWav(diagnostic.path);
 				} else {
-					if (ctx) ctx.ui.notify("Opening Fish Audio streaming TTS WebSocket...", "info");
+					if (ctx)
+						ctx.ui.notify(
+							"Opening Fish Audio streaming TTS WebSocket...",
+							"info",
+						);
 					await streamFishPcmToFfplay(text, settings);
 				}
 				if (ctx) ctx.ui.notify("TTS test completed", "info");
@@ -2172,7 +2863,8 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 			return;
 		}
 		if (id === "summarizer:no-models") {
-			if (ctx) ctx.ui.notify("No models with configured auth available.", "warning");
+			if (ctx)
+				ctx.ui.notify("No models with configured auth available.", "warning");
 			return;
 		}
 		if (id.startsWith("summarizer-model:")) {
@@ -2185,18 +2877,24 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 			}
 			settings.summarizer = { ...settings.summarizer, provider, modelId };
 			persistSettings(ctx);
-			if (ctx) ctx.ui.notify(`Summarizer model set to ${provider}:${modelId}`, "info");
+			if (ctx)
+				ctx.ui.notify(`Summarizer model set to ${provider}:${modelId}`, "info");
 			return;
 		}
 		if (id === "summarizer:set-threshold") {
 			const parsed = value ? parseInt(value, 10) : NaN;
 			if (isNaN(parsed) || parsed < 1) {
-				if (ctx) ctx.ui.notify("Invalid threshold. Must be a positive integer.", "error");
+				if (ctx)
+					ctx.ui.notify(
+						"Invalid threshold. Must be a positive integer.",
+						"error",
+					);
 				return;
 			}
 			settings.summarizer = { ...settings.summarizer, skipThreshold: parsed };
 			persistSettings(ctx);
-			if (ctx) ctx.ui.notify(`Skip threshold set to ${parsed} sentences`, "info");
+			if (ctx)
+				ctx.ui.notify(`Skip threshold set to ${parsed} sentences`, "info");
 			return;
 		}
 
@@ -2219,7 +2917,8 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 	}
 
 	pi.registerCommand("notification", {
-		description: "Configure response notifications and TTS engines (interactive menu)",
+		description:
+			"Configure response notifications and TTS engines (interactive menu)",
 		handler: async (_args, ctx) => {
 			currentCtx = ctx;
 			await openMenu(ctx, "Notification", buildMenuTree, handleMenuAction);
