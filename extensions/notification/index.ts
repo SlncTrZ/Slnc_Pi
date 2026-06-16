@@ -8,8 +8,8 @@ import {
 import { dirname, join } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { connect as connectTls, type TLSSocket } from "node:tls";
-import { connect as connectNet, type Socket } from "node:net";
+import { connect as connectTls } from "node:tls";
+import { connect as connectNet } from "node:net";
 import { randomBytes } from "node:crypto";
 import {
 	getAgentDir,
@@ -677,7 +677,9 @@ function createFishWebSocket(
 			}
 			try {
 				socket.destroy();
-			} catch {}
+			} catch {
+				// Best-effort cleanup; socket may already be destroyed
+			}
 		};
 		const sendFrame = (payload: Uint8Array, opcode = 0x2) =>
 			socket.write(createWebSocketFrame(payload, opcode));
@@ -772,7 +774,9 @@ function createFishWebSocket(
 						try {
 							sendFrame(new Uint8Array(), 0x8);
 							socket.end();
-						} catch {}
+						} catch {
+							// Best-effort WebSocket close; connection may already be gone
+						}
 					},
 				});
 			}
@@ -829,10 +833,14 @@ async function streamFishPcmToFfplay(
 			settled = true;
 			try {
 				ws?.close();
-			} catch {}
+			} catch {
+				// Best-effort cleanup; may already be closed
+			}
 			try {
 				player.stdin?.end();
-			} catch {}
+			} catch {
+				// Best-effort cleanup; process may have exited
+			}
 			if (error) reject(error);
 			else resolve();
 		};
@@ -1003,7 +1011,9 @@ function createVllmOmniWebSocket(
 			} else onError(error);
 			try {
 				socket.destroy();
-			} catch {}
+			} catch {
+				// Best-effort cleanup; socket may already be destroyed
+			}
 		};
 
 		const sendFrame = (payload: Uint8Array, opcode = 0x2) => {
@@ -1174,10 +1184,14 @@ async function streamVllmOmniPcmToFfplay(
 			settled = true;
 			try {
 				ws?.close();
-			} catch {}
+			} catch {
+				// Best-effort cleanup; may already be closed
+			}
 			try {
 				player.stdin?.end();
-			} catch {}
+			} catch {
+				// Best-effort cleanup; process may have exited
+			}
 			if (error) reject(error);
 			else resolve();
 		};
