@@ -9,6 +9,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { randomUUID } from "node:crypto";
 
 // ─── Config ──────────────────────────────────────────────────────────────
 const QDRANT_URL = process.env.QDRANT_URL || "http://192.168.1.227:6333";
@@ -85,7 +86,7 @@ async function upsertToQdrant(
 	const dateStr = now.toISOString().slice(0, 10);
 
 	const point = {
-		id: `${dateStr}-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+		id: randomUUID(),
 		vector,
 		payload: {
 			content,
