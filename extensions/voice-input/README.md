@@ -181,6 +181,33 @@ Set `/voice protocol websocket` to use a separately managed local ASR server ins
 - Health check: `http://127.0.0.1:8765/health`
 - Utterance stream: `ws://127.0.0.1:8765/ws`
 
+### Sherpa-ONNX Local Worker (Recommended)
+
+A lightweight local ASR worker using **sherpa-onnx** with Vietnamese model `zipformer-vi-30M` (33MB, runs on CPU).
+
+**Start the worker:**
+```bash
+python extensions/voice-input/worker/sherpa_worker.py
+```
+
+**Auto-launch config** (`~/.pi/agent/voice-input.json`):
+```json
+{
+  "workerProtocol": "websocket",
+  "websocketUrl": "ws://127.0.0.1:8766/ws",
+  "autoLaunchWorker": true,
+  "workerCommand": ["python", "/path/to/sherpa_worker.py"]
+}
+```
+
+The worker:
+- Runs locally on CPU, no GPU required
+- Supports Vietnamese speech recognition (zipformer-vi-30M)
+- Listens on `ws://127.0.0.1:8766/ws`
+- Health check at `http://127.0.0.1:8766/health`
+- Model auto-downloads from HuggingFace on first run (~33MB)
+- Uses the same VAD segmentation from the TypeScript extension
+
 The TypeScript extension still owns microphone capture, RMS/VAD segmentation, wake-gate handling, editor updates, and voice submit/stop commands. For each detected utterance it opens a WebSocket, sends raw PCM16 LE binary frames, sends `{ "type": "end" }` when trailing silence closes the segment, and consumes JSON `{ "partial": "..." }`, `{ "final": "..." }`, or `{ "error": "..." }` messages from the server.
 
 In this mode `/voice start-worker` only auto-launches a process when `workerCommand` is configured. Otherwise, start the local ASR server yourself and use `/voice health` or `/voice status` to verify the HTTP health endpoint. `/voice download-model` reports that model download is managed by the external server startup.
