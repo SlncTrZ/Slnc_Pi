@@ -1512,17 +1512,35 @@ async function synthesizeDiagnosticWav(
 
 function stripMarkdownForSpeech(markdown: string): string {
 	let text = markdown
+		// Remove code blocks
 		.replace(/```[\s\S]*?```/g, " ")
 		.replace(/~~~[\s\S]*?~~~/g, " ")
 		.replace(/`([^`]*)`/g, "$1")
+		// Remove images, keep link text
 		.replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
 		.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+		// Remove markdown headings and blockquotes
 		.replace(/^\s{0,3}#{1,6}\s+/gm, "")
 		.replace(/^\s{0,3}>\s?/gm, "")
+		// Remove unordered list markers (-, *, +) but keep numbered lists (1., 2., etc.)
 		.replace(/^\s*[-*+]\s+/gm, "")
-		.replace(/^\s*\d+[.)]\s+/gm, "")
-		.replace(/[\\*_~>#|]/g, " ")
+		// === Table handling ===
+		// Remove table separator lines: |---|, |:---|, |:---:|
+		.replace(/^\s*\|[:-]+\|[:\-| :]*\|?\s*$/gm, "")
+		// Convert table data rows: | A | B | C | → A: B, C
+		.replace(/^\s*\|(.+)\|\s*$/gm, (_, content) => {
+			const cells = content.split("|").map((s: string) => s.trim()).filter(Boolean);
+			if (cells.length === 0) return "";
+			if (cells.length === 1) return cells[0];
+			// First cell as label, rest joined
+			return `${cells[0]}: ${cells.slice(1).join(", ")}`;
+		})
+		// === End table handling ===
+		// Remove special markdown characters (except | which is already handled above)
+		.replace(/[\\*_~>#]/g, " ")
+		// Remove HTML tags
 		.replace(/<[^>]+>/g, " ")
+		// Collapse whitespace
 		.replace(/\s+/g, " ")
 		.trim();
 
