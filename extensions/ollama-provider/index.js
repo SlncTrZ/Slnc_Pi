@@ -2,12 +2,12 @@
  * ollama-provider — Register Ollama provider for PC .171
  *
  * Đăng ký Ollama server tại 192.168.1.171 với các model:
- *   - gemma4:e4B (reasoning, 128K context)
- *   - nomic-embed-text (embedding)
- *   - qwen3-vl:2b-thinking (vision)
- *   - qwen3:1.7b (TTS summarizer, nhẹ và nhanh)
+ *   - gemma4:e4B (7.5B, reasoning, 128K context)
+ *   - Qwythos:latest (9.2B, qwen35, 1M context)
+ *   - qwen3-vl:2b-thinking (2.1B, vision + thinking, 262K context)
+ *   - nomic-embed-text:latest (137M, embedding only — không register text)
  *
- * Wing: openclaw | Topic: pi_config | Updated: 2026-06-16
+ * Wing: openclaw | Topic: pi_config | Updated: 2026-06-25
  */
 
 export default function (pi) {
@@ -19,7 +19,7 @@ export default function (pi) {
 		models: [
 			{
 				id: "gemma4:e4B",
-				name: "Gemma 4 7.5B",
+				name: "Gemma 4 7.5B (reasoning)",
 				reasoning: true,
 				input: ["text"],
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -32,16 +32,30 @@ export default function (pi) {
 				},
 			},
 			{
-				id: "qwen3:1.7b",
-				name: "Qwen 3 1.7B (TTS Summarizer)",
+				id: "Qwythos:latest",
+				name: "Qwythos 9.2B (qwen35, 1M ctx)",
 				reasoning: false,
 				input: ["text"],
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: 8192,
-				maxTokens: 2048,
+				contextWindow: 1048576,
+				maxTokens: 8192,
 				compat: {
 					supportsReasoningEffort: false,
 					maxTokensField: "max_tokens",
+				},
+			},
+			{
+				id: "qwen3-vl:2b-thinking",
+				name: "Qwen 3 VL 2.1B (vision + thinking)",
+				reasoning: true,
+				input: ["text", "image"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 262144,
+				maxTokens: 8192,
+				compat: {
+					supportsReasoningEffort: true,
+					maxTokensField: "max_tokens",
+					thinkingFormat: "together",
 				},
 			},
 		],
