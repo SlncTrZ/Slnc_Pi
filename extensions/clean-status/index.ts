@@ -1,22 +1,35 @@
 /**
- * clean-status — Hide or replace the built-in animated "Working..." spinner to
- * eliminate the scrollback ghost-frame artifact.
+ * clean-status — Hide or replace the built-in animated "Working..." spinner.
  *
- * Root cause: pi-tui's WorkingStatusIndicator animates spinner frames via
- * setInterval(80ms). When the live region grows taller than the terminal and
- * auto-scrolls, the previous frame is committed to scrollback where no escape
- * sequence can reach it, leaving a frozen duplicate above the live spinner
- * (upstream issue badlogic/pi-mono#3083, closed without fix).
+ * Fixes two upstream pi-tui rendering artifacts that share the same root cause
+ * (the spinner at line 0 updating every 80ms via setInterval):
  *
- * This extension removes the source of the artifact by disabling the animated
+ * 1. Scrollback ghost-frame (badlogic/pi-mono#3083, closed without fix):
+ *    When the live region grows taller than the terminal and auto-scrolls, the
+ *    previous spinner frame is committed to scrollback where no escape sequence
+ *    can reach it, leaving a frozen duplicate spinner above the live one.
+ *
+ * 2. Viewport jump-to-top during streaming (badlogic/pi-mono#1950):
+ *    Each spinner tick changes line 0. Once streaming content pushes that line
+ *    above the viewport, the diff sees firstChanged < viewportTop and fires
+ *    fullRender(true), which emits \x1b[3J\x1b[2J\x1b[H (clear scrollback + clear
+ *    screen + cursor home). The terminal viewport snaps back to the top and the
+ *    user must scroll down to follow the answer. Upstream fix (isVolatile flag)
+ *    is NOT bundled in pi-tui 0.80.3, so the spinner remains the trigger.
+ *
+ * This extension removes the source of both artifacts by disabling the animated
  * spinner. When the pi-emote extension is active (MeiLin avatar), the avatar
- * already reflects agent activity (think/talk/read/write/tool/idle/failure),
- * so the text spinner is redundant. A static-indicator fallback is available
- * for setups where pi-emote is disabled.
+ * already reflects agent activity (think/talk/read/write/tool/idle/failure), so
+ * the text spinner is redundant. A static-indicator fallback is available for
+ * setups where pi-emote is disabled.
  *
  * Wing: pi-extensions | Topic: tui/clean-status | Updated: 2026-07-01
  */
-import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+	SessionStartEvent,
+} from "@earendil-works/pi-coding-agent";
 
 /** Working spinner modes selectable via the --working-spinner CLI flag. */
 type WorkingSpinnerMode = "hidden" | "static" | "default";
@@ -29,7 +42,8 @@ const DEFAULT_MODE: WorkingSpinnerMode = "hidden";
  * typo never leaves the user with no status indicator at all.
  */
 function coerceMode(value: string | boolean | undefined): WorkingSpinnerMode {
-	if (value === "hidden" || value === "static" || value === "default") return value;
+	if (value === "hidden" || value === "static" || value === "default")
+		return value;
 	return DEFAULT_MODE;
 }
 
