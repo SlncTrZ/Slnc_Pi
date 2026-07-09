@@ -44,6 +44,7 @@ pi remove .
 | **[conversation-saver](extensions/conversation-saver/)** | Auto-save Pi conversation to Qdrant MeiLin Knowledge Base | — |
 | **[ollama-provider](extensions/ollama-provider/)** | Register local Ollama provider (PC .171: gemma4, qwen3-vl) | — |
 | **[clean-status](extensions/clean-status/)** | Hide/replace the animated Working spinner to kill the scrollback ghost-frame artifact (#3083) | [README](extensions/clean-status/README.md) |
+| **[pi-core](extensions/pi-core/)** | Native Pi-Core Engine tools (Deepseek API + Docker sandbox) | — |
 
 ## Skills
 
@@ -66,7 +67,8 @@ Slnc_Pi/
 │   ├── system-prompt/        — Append-only system prompt profiles
 │   ├── conversation-saver/   — Auto-save conversation to Qdrant
 │   ├── ollama-provider/      — Ollama provider (.171 server)
-│   └── clean-status/         — Hide/replace animated Working spinner (ghost-frame fix)
+│   ├── clean-status/         — Hide/replace animated Working spinner (ghost-frame fix)
+│   └── pi-core/              — Native Pi-Core Engine tools
 ├── skills/
 │   ├── caveman/              — Caveman tiếng Việt
 │   ├── meilin-kb/            — Qdrant 6-Wing Knowledge Base

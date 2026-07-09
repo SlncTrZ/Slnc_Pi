@@ -4,124 +4,78 @@ description: >
   Autonomous Coding Agent sử dụng Pi-Core Engine.
   Gọi Deepseek API để decompose task, sinh code, chạy sandbox Docker,
   và review kết quả. MCP server tại .227:3003.
-allowed-tools: bash read write edit mcp ctx_shell
+allowed-tools: bash read write edit ctx_shell
 ---
 
-# Pi-Core — Autonomous Coding Agent MCP
+# Pi-Core — Autonomous Coding Agent
 
-> ✅ MCP server đã kết nối! Dùng `mcp({ server: "pi-core" })` để xem tools.
+> ✅ Extension `pi-core` đã load → Các tool của Pi-Core Engine được register
+> **trực tiếp** vào Pi. Không cần `mcp()` wrapper nữa!
 
 ---
 
-## 1. Kết nối
+## 1. Cách dùng (MỚI)
 
-```bash
-# Kiểm tra kết nối (đã connect tự động nếu skill được load)
-mcp({ server: "pi-core" })
+Extension `pi-core` tự động register 6 tools với prefix `pi_core_`:
 
-# Nếu chưa connect:
-mcp({ connect: "pi-core" })
+| Tool | Mô tả |
+|------|-------|
+| `pi_core_health` | Health check — verify server .227:3003 và dependencies |
+| `pi_core_generate_code` | Sinh code patch qua Worker Agent (Deepseek API) |
+| `pi_core_run_sandbox` | Chạy code patch trong Docker sandbox (network: none) |
+| `pi_core_review` | Review code patch qua Reviewer Agent |
+| `pi_core_status` | Kiểm tra pipeline state |
+| `pi_core_run_pipeline` | Full autonomous pipeline: decompose → worker → sandbox → review |
+
+**Gọi trực tiếp, không cần mcp():**
 ```
-
-Tools được prefix là `pi_core_`:
-- `pi_core_run_pipeline`
-- `pi_core_generate_code`
-- `pi_core_run_sandbox`
-- `pi_core_review`
-- `pi_core_status`
-- `pi_core_health`
-
----
-
-## 2. Cách dùng tools
-
-### `pi_core_health` — Kiểm tra server
-```bash
+# Cũ (deprecated):
 mcp({ server: "pi-core", tool: "pi_core_health", args: {} })
-```
 
-### `pi_core_generate_code` — Sinh code
-```bash
-mcp({
-  server: "pi-core",
-  tool: "pi_core_generate_code",
-  args: {
-    spec: "Add GET /health endpoint returning JSON with status and timestamp",
-    file_path: "src/routes/health.ts",
-    existing_code: "import { Router } from \"express\";\nconst router = Router();\nexport default router;"
-  }
-})
-```
-
-### `pi_core_run_sandbox` — Chạy sandbox Docker
-```bash
-mcp({
-  server: "pi-core",
-  tool: "pi_core_run_sandbox",
-  args: {
-    patch: "--- a/src/health.ts\n+++ b/src/health.ts\n@@ -1,3 +1,8 @@\n...",
-    test_commands: ["test -f src/health.ts && echo OK"]
-  }
-})
-```
-
-### `pi_core_review` — Review code
-```bash
-mcp({
-  server: "pi-core",
-  tool: "pi_core_review",
-  args: {
-    diff: "...patch content...",
-    test_output: "...test logs..."
-  }
-})
-```
-
-### `pi_core_status` — Pipeline state
-```bash
-mcp({ server: "pi-core", tool: "pi_core_status", args: {} })
-```
-
-### `pi_core_run_pipeline` — Full autonomous flow
-```bash
-mcp({
-  server: "pi-core",
-  tool: "pi_core_run_pipeline",
-  args: {
-    description: "Add health check endpoint to Express app",
-    repo: "/tmp/test-project"
-  }
-})
+# Mới:
+pi_core_health
 ```
 
 ---
 
-## 3. Quick Examples
-
-### Sinh code nhanh
-```
-mcp({ server: "pi-core", tool: "pi_core_generate_code", args: {
-  spec: "Add GET /health endpoint",
-  file_path: "src/routes/health.ts",
-  existing_code: "import { Router } from \"express\";\nconst router = Router();\nexport default router;"
-}})
-```
+## 2. Quick Examples
 
 ### Kiểm tra server
 ```
-mcp({ server: "pi-core", tool: "pi_core_health", args: {} })
-// → { status: "ok", docker: true, uptime: ... }
+pi_core_health
+# → { status: "ok", docker: true, uptime: ... }
+```
+
+### Sinh code nhanh
+```
+pi_core_generate_code spec="Add GET /health endpoint" file_path="src/routes/health.ts" existing_code="..."
+```
+
+### Chạy sandbox
+```
+pi_core_run_sandbox patch="--- a/src/health.ts\n+++ ..." test_commands=["test -f src/health.ts && echo OK"]
+```
+
+### Full pipeline
+```
+pi_core_run_pipeline description="Add health endpoint" repo="/tmp/test-project"
+```
+
+### Kiểm tra trạng thái
+```
+/pi-core
+# → "Pi-Core: ✅ connected to .227:3003 | ..."
 ```
 
 ---
 
-## 4. Architecture
+## 3. Architecture
 
 ```
 Anh
-  │ mcp({ server: "pi-core", tool: "pi_core_..." })
+  │ pi_core_generate_code(...)
   ▼
-Pi-Core Engine (.227:3003)
+Pi Extension (local) → HTTP JSON-RPC → Pi-Core Engine (.227:3003)
   │
   ├─→ Worker Agent → Deepseek API → sinh code patch
   ├─→ Docker Sandbox → network:none → apply + test
@@ -130,15 +84,18 @@ Pi-Core Engine (.227:3003)
 
 ---
 
-## 5. Troubleshooting
+## 4. Troubleshooting
 
-**MCP không connect được:**
-```bash
-mcp({ connect: "pi-core" })
-# hoặc restart server:
-bash(ssh dinhtc@192.168.1.227 "curl -s http://localhost:3003/")
+**Tool trả lỗi "not connected":**
+- Kiểm tra server .227 có hoạt động: `ssh dinhtc@192.168.1.227 "curl -s http://localhost:3003/"`
+- Reload Pi: `/reload`
+
+**Tool trả error:**
+- Kiểm tra log: `ssh dinhtc@192.168.1.227 "cat /tmp/pi-core-mcp.log | tail -20"`
+- Docker sandbox: `ssh dinhtc@192.168.1.227 "docker images pi-sandbox"`
+
+**Fallback (nếu extension lỗi):**
+Dùng `mcp()` như cũ:
 ```
-
-**Tool trả lỗi:**
-- Kiểm tra log: `bash(ssh dinhtc@192.168.1.227 "cat /tmp/pi-core-mcp.log | tail -20")`
-- Docker sandbox: `bash(ssh dinhtc@192.168.1.227 "docker images pi-sandbox")`
+mcp({ server: "pi-core", tool: "pi_core_health", args: {} })
+```
