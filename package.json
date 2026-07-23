@@ -32,6 +32,7 @@
     "@types/node": "^25.9.1",
     "@types/ws": "^8.18.1",
     "typebox": "^1.1.39",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }
