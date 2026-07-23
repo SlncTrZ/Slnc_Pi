@@ -1,0 +1,11 @@
+{
+  "name": "context-pruner",
+  "private": true,
+  "keywords": ["pi-package", "pi-extension"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
