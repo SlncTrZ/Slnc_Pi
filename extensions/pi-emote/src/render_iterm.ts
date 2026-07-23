@@ -15,24 +15,29 @@ import type { ImageDims } from "./render_image.js";
  * for text after the image).
  */
 export class ITermRenderer extends BaseImageRenderer {
-  protected cursorAdvances = true;
-  private frameCounter = 0;
+	protected cursorAdvances = true;
+	private frameCounter = 0;
 
-  constructor(size: number) {
-    super(size);
-  }
+	constructor(size: number) {
+		super(size);
+	}
 
-  protected encode(base64: string, _dims: ImageDims, rows: number, _yOffset: number): string | null {
-    this.frameCounter++;
-    return encodeITerm2(base64, {
-      width: this.size,
-      height: "auto",
-      preserveAspectRatio: true,
-      name: `emote-${this.frameCounter}`,
-    });
-  }
+	protected encode(
+		base64: string,
+		_dims: ImageDims,
+		_rows: number,
+		_yOffset: number,
+	): string | null {
+		this.frameCounter++;
+		return encodeITerm2(base64, {
+			width: this.size,
+			height: "auto",
+			preserveAspectRatio: true,
+			name: `emote-${this.frameCounter}`,
+		});
+	}
 
-  dispose() {
-    this.currentFrame = null;
-  }
+	dispose() {
+		this.currentFrame = null;
+	}
 }
