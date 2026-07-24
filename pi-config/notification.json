@@ -1,0 +1,27 @@
+{
+  "mode": "beep",
+  "ttsEngine": "omnivoice",
+  "fish": {
+    "referenceId": "6d370109274d4c29ab83ad6b6af77978",
+    "model": "s2-pro"
+  },
+  "openAiCompatible": {
+    "baseUrl": "http://localhost:8000/v1",
+    "model": "tts-1",
+    "voice": "alloy"
+  },
+  "vllmOmni": {
+    "baseUrl": "http://localhost:8091",
+    "maxNewTokens": 256
+  },
+  "omnivoice": {
+    "baseUrl": "http://192.168.1.171:8880/v1",
+    "profile": "Nu-01-Mai"
+  },
+  "ttsOutputMode": "verbose",
+  "summarizer": {
+    "skipThreshold": 4,
+    "provider": "ollama",
+    "modelId": "qwen3:1.7b"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "lastChangelogVersion": "0.82.0",
+  "defaultProvider": "deepseek",
+  "defaultModel": "deepseek-v4-flash",
+  "defaultThinkingLevel": "high",
+  "packages": [
+    "git:github.com/SlncTrZ/Slnc_Pi",
+    "npm:@narumitw/pi-goal",
+    "npm:pi-lens",
+    "npm:pi-ultra-compact",
+    "npm:@quintinshaw/pi-dynamic-workflows",
+    "npm:pi-web-access",
+    "npm:pi-btw",
+    "npm:pi-lean-ctx",
+    "npm:pi-plan",
+    "npm:@heyhuynhgiabuu/pi-pretty"
+  ],
+  "extensions": [],
+  "theme": "dark",
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 8192,
+    "keepRecentTokens": 12000
+  },
+  "enabledModels": [
+    "9router/ds/deepseek-v4-flash",
+    "9router/ds/deepseek-v4-pro",
+    "9router/glm/glm-5.2",
+    "9router/oc/deepseek-v4-flash-free",
+    "9router/oc/mimo-v2.5-free",
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro",
+    "zai-coding-cn/glm-5.1",
+    "zai-coding-cn/glm-5.2"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "mempalace": {
+      "url": "http://192.168.1.227:3002/mcp",
+      "auth": false,
+      "lifecycle": "keep-alive"
+    },
+    "pi-core": {
+      "url": "http://192.168.1.227:3003/mcp",
+      "auth": false,
+      "lifecycle": "keep-alive"
+    }
+  }
+}

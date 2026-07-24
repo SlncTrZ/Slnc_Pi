@@ -1,0 +1,30 @@
+{
+  "mode": "toggle",
+  "autoLaunchWorker": true,
+  "wakePhrases": [
+    "hey emi",
+    "hey emy",
+    "hey emilia",
+    "hey emmy",
+    "emi",
+    "emy",
+    "emilia",
+    "emmy"
+  ],
+  "sampleRate": 16000,
+  "ffmpegPath": "",
+  "audioDevice": "",
+  "captureArgs": [],
+  "workerProtocol": "websocket",
+  "workerCommand": [
+    "python",
+    "${PI_AGENT_DIR}/git/github.com/SlncTrZ/Slnc_Pi/extensions/voice-input/worker/sherpa_worker.py"
+  ],
+  "workerHost": "127.0.0.1",
+  "workerPort": 8766,
+  "workerPath": "/ws",
+  "websocketUrl": "ws://127.0.0.1:8766/ws",
+  "stripLanguageTags": true,
+  "appendSeparator": " ",
+  "logPath": "${PI_AGENT_DIR}/voice-input/voice-worker.log"
+}

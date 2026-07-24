@@ -1,5 +1,19 @@
+# Python
 .venv
 local/
+
+# Node
 node_modules/
+
+# Vendored upstream
 upstream_extensions/
+
+# Emote extension binary/data
 *emi*
+
+# Secrets (API keys, credentials)
+pi-config/secrets/auth.json
+
+# Pi local cache
+pi-config/models-store.json
+pi-config/mcp-cache.json

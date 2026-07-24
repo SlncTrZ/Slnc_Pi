@@ -4,6 +4,15 @@
     "pi-package"
   ],
   "private": true,
+  "pi-global": {
+    "description": "npm global packages cần cài trước khi dùng Slnc_Pi",
+    "required": [
+      "@earendil-works/pi-coding-agent@^0.82.0",
+      "@ast-grep/cli@^0.44.0",
+      "@modelcontextprotocol/server-memory",
+      "mcp-proxy"
+    ]
+  },
   "pi": {
     "extensions": [
       "./extensions"
