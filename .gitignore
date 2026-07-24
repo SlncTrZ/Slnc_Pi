@@ -17,3 +17,5 @@ pi-config/secrets/auth.json
 # Pi local cache
 pi-config/models-store.json
 pi-config/mcp-cache.json
+*.pyc
+__pycache__/

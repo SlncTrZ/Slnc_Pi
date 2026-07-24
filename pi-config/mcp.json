@@ -9,6 +9,10 @@
       "url": "http://192.168.1.227:3003/mcp",
       "auth": false,
       "lifecycle": "keep-alive"
+    },
+    "meilin-brain": {
+      "command": "python",
+      "args": ["{{PI_AGENT_DIR}}/git/github.com/SlncTrZ/Slnc_Pi/extensions/meilin-mcp/meilin_mcp.py"]
     }
   }
 }
