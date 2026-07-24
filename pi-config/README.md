@@ -29,7 +29,7 @@ cp pi-config/secrets/auth.json ~/.pi/agent/auth.json
 | `models.json` | 9router provider definition with all model specs |
 | `mcp.json` | MCP server connections (mempalace, pi-core) |
 | `notification.json` | TTS/notification configuration (Omnivoice, beep) |
-| `voice-input.json` | Voice input settings (wake words, sherpa worker) |
+| `voice-input.json` | Voice input settings (wake words, sherpa worker) — dùng `{{PI_AGENT_DIR}}` placeholder |
 | `trust.json` | Trusted working directories |
 | `AGENTS.md` | MeiLin agent system instructions |
 | `APPEND_SYSTEM.md` | Karpathy 12 Guidelines |

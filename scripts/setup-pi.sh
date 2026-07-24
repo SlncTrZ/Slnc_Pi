@@ -75,7 +75,12 @@ echo "  ✓ Config backed up to: $backupDir"
 for file in settings.json models.json mcp.json notification.json voice-input.json trust.json AGENTS.md APPEND_SYSTEM.md; do
   src="$SLNC_PI_DIR/pi-config/$file"
   dst="$PI_AGENT_DIR/$file"
-  [ -f "$src" ] && cp "$src" "$dst" && echo "  ✓ $file"
+  if [ -f "$src" ]; then
+    cp "$src" "$dst"
+    # Replace {{PI_AGENT_DIR}} placeholder với path thật
+    sed -i "s|{{PI_AGENT_DIR}}|$PI_AGENT_DIR|g" "$dst"
+    echo "  ✓ $file"
+  fi
 done
 
 # Restore auth.json from secrets

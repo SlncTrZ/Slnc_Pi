@@ -119,9 +119,14 @@ foreach ($file in $configFiles) {
     $src = "$SLNC_PI_DIR/pi-config/$file"
     $dst = "$PI_AGENT_DIR/$file"
     if (Test-Path $src) {
-        Copy-Item $src $dst -Force
-        Write-Host "  ✓ $file" -ForegroundColor Green
-    }
+            Copy-Item $src $dst -Force
+            Write-Host "  ✓ $file" -ForegroundColor Green
+        }
+    
+    # Replace {{PI_AGENT_DIR}} placeholder với path thật
+    $content = Get-Content $dst -Raw
+    $content = $content.Replace('{{PI_AGENT_DIR}}', $PI_AGENT_DIR.Replace('\', '/'))
+    Set-Content $dst -Value $content -NoNewline
 }
 
 # Restore auth.json từ secrets (nếu có)
