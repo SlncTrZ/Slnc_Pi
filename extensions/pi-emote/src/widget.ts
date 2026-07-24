@@ -203,6 +203,24 @@ function renderPlaceholderFrame(
 	return lines;
 }
 
+/**
+ * Ensure no rendered line exceeds `width`. The Pi TUI strictly enforces
+ * that each line from render() stays within `width` columns. ESC sequences
+ * (cursor-right, image protocols, etc.) are zero-width, but the visible
+ * text after them must not overflow. This also guards against composition
+ * of border + image + separator + info text exceeding the available space.
+ */
+function validateLineWidths(lines: string[], width: number): string[] {
+	return lines.map((line) => {
+		const vw = visibleWidth(line);
+		if (vw > width) {
+			// Truncate visible part — preserves leading ESC sequences
+			return truncateToWidth(line, width, "…");
+		}
+		return line;
+	});
+}
+
 // --- Widget factory ---
 
 export interface WidgetDeps {
@@ -250,11 +268,16 @@ export function createWidgetFactory(deps: WidgetDeps) {
 				const lines: string[] = [];
 				lines.push(border);
 
-				if (frame.kind === "image") {
-					if (frame.cursorAdvances) {
+				// Atomic frame snapshot: capture the frame ONCE before rendering,
+				// so animation timers firing mid-render don't change the data
+				// mid-flight, causing inconsistent line output (Bug #1 root cause d).
+				const snapshot = frame;
+
+				if (snapshot.kind === "image") {
+					if (snapshot.cursorAdvances) {
 						lines.push(
 							...renderITermFrame(
-								frame,
+								snapshot,
 								width,
 								gridSize,
 								infoLines,
@@ -264,7 +287,7 @@ export function createWidgetFactory(deps: WidgetDeps) {
 					} else {
 						lines.push(
 							...renderKittyFrame(
-								frame,
+								snapshot,
 								width,
 								gridSize,
 								infoLines,
@@ -272,10 +295,10 @@ export function createWidgetFactory(deps: WidgetDeps) {
 							),
 						);
 					}
-				} else if (frame.kind === "placeholder") {
+				} else if (snapshot.kind === "placeholder") {
 					lines.push(
 						...renderPlaceholderFrame(
-							frame,
+							snapshot,
 							width,
 							config,
 							infoLines,
@@ -284,11 +307,12 @@ export function createWidgetFactory(deps: WidgetDeps) {
 					);
 				} else {
 					lines.push(
-						...renderTextFrame(frame, width, config, infoLines, borderColor),
+						...renderTextFrame(snapshot, width, config, infoLines, borderColor),
 					);
 				}
 
-				return lines;
+				// Validate all lines against width limit
+				return validateLineWidths(lines, width);
 			},
 			invalidate() {},
 			dispose() {

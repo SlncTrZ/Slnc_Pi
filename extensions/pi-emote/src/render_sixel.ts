@@ -12,6 +12,16 @@ import { log } from "./log.js";
  * (hide/show cursor and a final IND/newline-style movement). The pi widget
  * already owns cursor/layout behavior, so those wrappers are stripped and only
  * the Sixel DCS payload is rendered inline.
+ *
+ * ## Scroll position safety
+ *
+ * We must NEVER emit DECSC/DECRC (\x1b7/\x1b8) — on Windows Terminal, DECRC
+ * can scroll the viewport to make the saved cursor position visible, causing
+ * the "jump to top" bug. Instead, after the Sixel DCS, we position the cursor
+ * relative to where the Sixel left it:
+ * - Sixel on WT renders inline from cursor position, ending at (rows, col~0)
+ * - We move: up to last image row, right past image width
+ * - Then the widget info text continues at the correct position
  */
 export class SixelRenderer extends BaseImageRenderer {
   protected cursorAdvances = true;
@@ -50,19 +60,20 @@ export class SixelRenderer extends BaseImageRenderer {
         timeout: 5000,
       });
 
-      const sixel = stripChafaWrappers(out);
-      const downToLastImageRow = rows > 1 ? `\x1b[${rows - 1}B` : "";
-      const rightPastImage = `\x1b[${this.size}C`;
+      const sixel = sanitizeChafaOutput(out);
 
       // Prefix with a dummy Kitty graphics sequence (\x1b_G;) so pi-tui's
       // isImageLine() recognizes it as an image line. This prevents the TUI
       // from running normalizeTerminalOutput() on it or crashing on width checks.
       // Since there's no 'i=' param, Kitty image cleanup safely ignores it.
       //
-      // The DCS payload is wrapped in DECSC/DECRC (\x1b7 / \x1b8) to neutralize
-      // Windows Terminal's Sixel cursor side-effects. After restore, we explicitly
-      // move to the widget position expected after an advancing image.
-      return `\x1b_G;\x1b7${sixel}\x1b8${downToLastImageRow}${rightPastImage}`;
+      // After the Sixel DCS, cursor ends up at the bottom of the image area
+      // (row=rows, col~0). Move UP by 1 to reach the last image row,
+      // then RIGHT past the image width so info text aligns correctly.
+      // No DECSC/DECRC — they can scroll the viewport on Windows Terminal.
+      const upToLastRow = rows > 1 ? `\x1b[${rows - 1}A` : "";
+      const rightPastImage = `\x1b[${this.size}C`;
+      return `\x1b_G;${sixel}${upToLastRow}${rightPastImage}`;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log(`SixelRenderer.encode: chafa failed: ${message}`);
@@ -75,11 +86,31 @@ export class SixelRenderer extends BaseImageRenderer {
   }
 }
 
-function stripChafaWrappers(sequence: string): string {
+/**
+ * Strip terminal-control wrappers Chafa adds around Sixel payload,
+ * AND aggressively remove any dangerous escape sequences that could
+ * mess with the TUI layout or scroll position:
+ *
+ * - Hide/show cursor (Chafa envelope)
+ * - IND (\x1bD) — scrolls display if at bottom
+ * - CUP (\x1b[H, \x1b[f) — cursor home (jumps to top of terminal)
+ * - ED (\x1b[J, \x1b[0J, \x1b[1J, \x1b[2J, \x1b[3J) — erase display
+ * - Newlines
+ * - DECSC/DECRC (\x1b7/\x1b8) — in case Chafa or a future version emits them
+ */
+function sanitizeChafaOutput(sequence: string): string {
   return sequence
     .replace(/^\x1b\[\?25l/, "")
-    .replace(/\x1bD\x1b\[\?25h$/, "")
     .replace(/\x1b\[\?25h$/, "")
+    // Strip ALL IND (not just trailing) — any \x1bD can scroll
+    .replace(/\x1bD/g, "")
+    // Strip CUP cursor-home sequences that jump viewport
+    .replace(/\x1b\[\d*;?\d*[Hf]/g, "")
+    // Strip ED erase-display sequences
+    .replace(/\x1b\[\d*[J]/g, "")
+    // Strip DECSC/DECRC that might appear in Chafa output
+    .replace(/\x1b[78]/g, "")
+    // Strip newlines that break line-counting
     .replace(/\r?\n/g, "");
 }
 
