@@ -205,16 +205,19 @@ function renderPlaceholderFrame(
 
 /**
  * Ensure no rendered line exceeds `width`. The Pi TUI strictly enforces
- * that each line from render() stays within `width` columns. ESC sequences
- * (cursor-right, image protocols, etc.) are zero-width, but the visible
- * text after them must not overflow. This also guards against composition
- * of border + image + separator + info text exceeding the available space.
+ * that each line from render() stays within `width` columns.
+ *
+ * Lines containing image protocol escape sequences (\x1b_G for Kitty/Sixel)
+ * are SKIPPED — their binary-ish payload confuses visibleWidth() and would
+ * be corrupted by truncation. The Pi TUI already handles these via
+ * isImageLine() and they are zero-width from its perspective.
  */
 function validateLineWidths(lines: string[], width: number): string[] {
 	return lines.map((line) => {
+		// Skip image protocol lines — \x1b_G marks Kitty/Sixel data
+		if (line.includes("\x1b_G")) return line;
 		const vw = visibleWidth(line);
 		if (vw > width) {
-			// Truncate visible part — preserves leading ESC sequences
 			return truncateToWidth(line, width, "…");
 		}
 		return line;
