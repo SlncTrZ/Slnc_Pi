@@ -13,15 +13,12 @@ import { log } from "./log.js";
  * already owns cursor/layout behavior, so those wrappers are stripped and only
  * the Sixel DCS payload is rendered inline.
  *
- * ## Scroll position safety
+ * ## Cursor save/restore
  *
- * We must NEVER emit DECSC/DECRC (\x1b7/\x1b8) — on Windows Terminal, DECRC
- * can scroll the viewport to make the saved cursor position visible, causing
- * the "jump to top" bug. Instead, after the Sixel DCS, we position the cursor
- * relative to where the Sixel left it:
- * - Sixel on WT renders inline from cursor position, ending at (rows, col~0)
- * - We move: up to last image row, right past image width
- * - Then the widget info text continues at the correct position
+ * DECSC/DECRC (\x1b7/\x1b8) were replaced with ANSI SCO save/restore
+ * (\x1b[s/\x1b[u) because on Windows Terminal, DECRC can scroll the viewport
+ * to make the saved cursor position visible — causing the "jump to top" bug.
+ * ANSI SCO restore only affects cursor position, not the viewport.
  */
 export class SixelRenderer extends BaseImageRenderer {
   protected cursorAdvances = true;
@@ -67,13 +64,13 @@ export class SixelRenderer extends BaseImageRenderer {
       // from running normalizeTerminalOutput() on it or crashing on width checks.
       // Since there's no 'i=' param, Kitty image cleanup safely ignores it.
       //
-      // After the Sixel DCS, cursor ends up at the bottom of the image area
-      // (row=rows, col~0). Move UP by 1 to reach the last image row,
-      // then RIGHT past the image width so info text aligns correctly.
-      // No DECSC/DECRC — they can scroll the viewport on Windows Terminal.
-      const upToLastRow = rows > 1 ? `\x1b[${rows - 1}A` : "";
+      // ANSI SCO save (\x1b[s) at start of image area; restore (\x1b[u) after
+      // Sixel to return cursor to saved position, then move to expected location.
+      // ANSI SCO is used instead of DECSC/DECRC (\x1b7/\x1b8) because on Windows
+      // Terminal, DECRC scrolls the viewport — SCO restore does not.
+      const downToLastImageRow = rows > 1 ? `\x1b[${rows - 1}B` : "";
       const rightPastImage = `\x1b[${this.size}C`;
-      return `\x1b_G;${sixel}${upToLastRow}${rightPastImage}`;
+      return `\x1b_G;\x1b[s${sixel}\x1b[u${downToLastImageRow}${rightPastImage}`;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log(`SixelRenderer.encode: chafa failed: ${message}`);
