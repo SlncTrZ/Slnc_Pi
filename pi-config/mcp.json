@@ -12,7 +12,9 @@
     },
     "meilin-brain": {
       "command": "python",
-      "args": ["{{PI_AGENT_DIR}}/git/github.com/SlncTrZ/Slnc_Pi/extensions/meilin-mcp/meilin_mcp.py"]
+      "args": ["{{PI_AGENT_DIR}}/git/github.com/SlncTrZ/Slnc_Pi/extensions/meilin-mcp/meilin_mcp.py"],
+      "auth": false,
+      "lifecycle": "keep-alive"
     }
   }
 }

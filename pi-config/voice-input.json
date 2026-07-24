@@ -16,7 +16,7 @@
   "audioDevice": "",
   "captureArgs": [],
   "workerProtocol": "websocket",
-  "workerCommand": [
+"workerCommand": [
     "python",
     "{{PI_AGENT_DIR}}/git/github.com/SlncTrZ/Slnc_Pi/extensions/voice-input/worker/sherpa_worker.py"
   ],
