@@ -17,7 +17,13 @@ import { existsSync, readFileSync } from "node:fs";
 // ─── Config ──────────────────────────────────────────────────────────────
 const SECRETS_PATH =
 	process.env.QDRANT_SECRETS_PATH ||
-	require("node:path").join(require("node:os").homedir(), ".pi", "agent", "secrets", "qdrant.json");
+	require("node:path").join(
+		require("node:os").homedir(),
+		".pi",
+		"agent",
+		"secrets",
+		"qdrant.json",
+	);
 
 const QDRANT_URL = process.env.QDRANT_URL || "http://192.168.1.227:6333";
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.227:11434";
@@ -29,7 +35,10 @@ const EMBED_CHARS = 1000; // độ dài text dùng để tạo vector
 // ─── Secrets (KHÔNG hardcode key trong source) ───────────────────────────
 let cachedApiKey: string | null = null;
 
-function loadSecrets(): { qdrant: { api_key?: string }; ollama?: { url?: string } } {
+function loadSecrets(): {
+	qdrant: { api_key?: string };
+	ollama?: { url?: string };
+} {
 	try {
 		if (existsSync(SECRETS_PATH)) {
 			return JSON.parse(readFileSync(SECRETS_PATH, "utf-8")) as {
@@ -50,9 +59,7 @@ function loadSecrets(): { qdrant: { api_key?: string }; ollama?: { url?: string 
 function getApiKey(): string {
 	if (cachedApiKey) return cachedApiKey;
 	cachedApiKey =
-		process.env.QDRANT_API_KEY ||
-		loadSecrets().qdrant.api_key ||
-		"";
+		process.env.QDRANT_API_KEY || loadSecrets().qdrant.api_key || "";
 	if (!cachedApiKey) {
 		console.error(
 			`[conversation-saver] ⚠️ Thiếu QDRANT_API_KEY — tạo ${SECRETS_PATH} hoặc set env QDRANT_API_KEY`,
@@ -106,7 +113,9 @@ function buildSummary(entries: ConvEntry[]): string {
 
 /** ID deterministic dạng UUID v5-like — Qdrant chỉ chấp nhận integer hoặc UUID. */
 function sessionPointId(sessionId: string): string {
-	const hash = createHash("sha256").update(`conversation:${sessionId}`).digest();
+	const hash = createHash("sha256")
+		.update(`conversation:${sessionId}`)
+		.digest();
 	hash[6] = (hash[6] & 0x0f) | 0x50; // version 5
 	hash[8] = (hash[8] & 0x3f) | 0x80; // variant RFC 4122
 	const hex = hash.subarray(0, 16).toString("hex");
@@ -122,7 +131,9 @@ async function generateEmbedding(text: string): Promise<number[]> {
 		body: JSON.stringify({ model: EMBED_MODEL, prompt: text }),
 	});
 	if (!resp.ok) {
-		throw new Error(`Embedding HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
+		throw new Error(
+			`Embedding HTTP ${resp.status}: ${await resp.text().catch(() => "")}`,
+		);
 	}
 	const data = (await resp.json()) as { embedding?: number[] };
 	if (!data.embedding || data.embedding.length !== 768) {
@@ -178,7 +189,9 @@ async function upsertToQdrant(
 		},
 	);
 	if (!resp.ok) {
-		throw new Error(`Qdrant upsert HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
+		throw new Error(
+			`Qdrant upsert HTTP ${resp.status}: ${await resp.text().catch(() => "")}`,
+		);
 	}
 	const result = (await resp.json()) as { status?: string };
 	if (result.status !== "ok" && result.status !== "acknowledged") {
@@ -208,7 +221,13 @@ async function saveBuffer(): Promise<{ saved: number }> {
 	const summary = buildSummary(buffer);
 
 	try {
-		await upsertToQdrant(content, summary, buffer.length, currentSessionId, sessionStartTime);
+		await upsertToQdrant(
+			content,
+			summary,
+			buffer.length,
+			currentSessionId,
+			sessionStartTime,
+		);
 		console.log(
 			`[conversation-saver] ✅ Saved ${buffer.length} messages: ${summary.substring(0, 80)}`,
 		);
@@ -244,7 +263,9 @@ export default function (pi: ExtensionAPI) {
 		sessionStartTime = Date.now();
 		const dateStr = new Date(sessionStartTime).toISOString().slice(0, 10);
 		currentSessionId = `pi_${dateStr}_${sessionStartTime}`;
-		console.log(`[conversation-saver] Session started: ${currentSessionId}, buffer reset`);
+		console.log(
+			`[conversation-saver] Session started: ${currentSessionId}, buffer reset`,
+		);
 	});
 
 	// ── Message end: capture user & assistant messages only (skip tool) ─────

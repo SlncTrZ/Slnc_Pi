@@ -18,7 +18,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // ─── Config ──────────────────────────────────────────────────────────────
-const SECRETS_PATH = process.env.QDRANT_SECRETS_PATH || join(homedir(), ".pi", "agent", "secrets", "qdrant.json");
+const SECRETS_PATH =
+	process.env.QDRANT_SECRETS_PATH ||
+	join(homedir(), ".pi", "agent", "secrets", "qdrant.json");
 const QDRANT_URL = process.env.QDRANT_URL || "http://192.168.1.227:6333";
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.227:11434";
 const EMBED_MODEL = "nomic-embed-text";
@@ -67,7 +69,10 @@ function extractText(msg: any): string {
 
 /** Lấy danh sách URL từ text kết quả web search. */
 function extractSources(text: string): string[] {
-	const urls = Array.from(text.matchAll(/https?:\/\/[^\s)\]}>,]+/g), (m) => m[0]);
+	const urls = Array.from(
+		text.matchAll(/https?:\/\/[^\s)\]}>,]+/g),
+		(m) => m[0],
+	);
 	return [...new Set(urls)].slice(0, 20);
 }
 
@@ -118,7 +123,9 @@ async function upsertToWiki(
 		`## Answer`,
 		answer.trim(),
 		...((extra?.note && [``, `## Note`, extra.note]) || []),
-		...(sources.length ? [``, `## Sources`, ...sources.map((s) => `- ${s}`)] : []),
+		...(sources.length
+			? [``, `## Sources`, ...sources.map((s) => `- ${s}`)]
+			: []),
 	].join("\n");
 
 	const embedText = content.substring(0, EMBED_CHARS);
@@ -159,7 +166,9 @@ async function upsertToWiki(
 		body: JSON.stringify({ points: [point] }),
 	});
 	if (!resp.ok) {
-		throw new Error(`Qdrant upsert HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
+		throw new Error(
+			`Qdrant upsert HTTP ${resp.status}: ${await resp.text().catch(() => "")}`,
+		);
 	}
 	const result = (await resp.json()) as { status?: string };
 	if (result.status !== "ok" && result.status !== "acknowledged") {
@@ -197,7 +206,9 @@ export default function (pi: ExtensionAPI) {
 				);
 			}
 		} catch (err) {
-			console.error(`[web-wiki-saver] ❌ Lưu wiki thất bại: ${err instanceof Error ? err.message : String(err)}`);
+			console.error(
+				`[web-wiki-saver] ❌ Lưu wiki thất bại: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
 	});
 
@@ -216,7 +227,8 @@ export default function (pi: ExtensionAPI) {
 			properties: {
 				query: {
 					type: "string",
-					description: "Search query / chủ đề nghiên cứu (VD: 'DeepSeek V4 architecture')",
+					description:
+						"Search query / chủ đề nghiên cứu (VD: 'DeepSeek V4 architecture')",
 				},
 				answer: {
 					type: "string",
