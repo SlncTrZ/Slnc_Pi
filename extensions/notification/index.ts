@@ -108,6 +108,8 @@ const NATURAL_SPEECH_PROMPT = [
 	"- Replace numeric codes, IDs, hashes, version numbers, and hex strings with natural descriptions (e.g. 'version 2 point 3' instead of 'v2.3') when they add no spoken value.",
 	"- Keep the key points: main outcomes, decisions, reasons, and conclusions.",
 	"- Keep it SHORT: maximum 4-5 sentences total. Prioritize the most important information.",
+	"- Optionally insert 1-2 non-verbal expression tags when the context naturally calls for them. Supported tags: [laughter] for humor/joy, [sigh] for relief or exhaustion, [surprise-wa] / [surprise-oh] for unexpected great results, [confirmation-en] for confirmation or agreement, [dissatisfaction-hnn] for disappointment.",
+	"- Keep tags EXACTLY in [square brackets] (e.g. [laughter]) — the TTS speaks them as real sounds. Never overuse: at most 2 tags per response, only when the emotion is clearly present.",
 	"- Output only the spoken text: no markdown, no quotes, no code fences, no formatting.",
 ].join(" ");
 
