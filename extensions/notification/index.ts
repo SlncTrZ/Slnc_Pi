@@ -106,8 +106,8 @@ const NATURAL_SPEECH_PROMPT = [
 	"Rules:",
 	"- Remove ALL code blocks, code snippets, inline code, file paths, tables, and technical symbols.",
 	"- Replace numeric codes, IDs, hashes, version numbers, and hex strings with natural descriptions (e.g. 'version 2 point 3' instead of 'v2.3') when they add no spoken value.",
-	"- Keep the full substance: main points, decisions, reasons, examples (described naturally), and conclusions.",
-	"- Do NOT shorten the response beyond removing unreadable content — preserve the complete meaning.",
+	"- Keep the key points: main outcomes, decisions, reasons, and conclusions.",
+	"- Keep it SHORT: maximum 4-5 sentences total. Prioritize the most important information.",
 	"- Output only the spoken text: no markdown, no quotes, no code fences, no formatting.",
 ].join(" ");
 
@@ -1553,24 +1553,32 @@ async function synthesizeDiagnosticWav(
  * function-call) sau khi LLM naturalize — đảm bảo TTS không bao giờ đọc code.
  */
 function scrubTechnicalNoise(text: string): string {
-	return text
-		// function-call style: createHash("sha256") → bỏ
-		.replace(/\b[\w.]+\s*\(\s*"[^"]*"\s*\)/g, " ")
-		// windows paths: C:\foo\bar
-		.replace(/[A-Za-z]:\\[^\s,;)\]]+/g, " ")
-		// file paths chứa dấu / với extension quen thuộc
-		.replace(/\b[\w./-]+\/\w[\w./-]*\.(?:ts|tsx|js|jsx|py|json|md|toml|yaml|sh|ps1|wav|mp3|pyc)\b/g, " ")
-		// tên file trần với extension quen thuộc
-		.replace(/\b[\w-]+\.(?:ts|tsx|js|jsx|py|json|md|toml|yaml|sh|ps1)\b/g, " ")
-		// long hex / commit hash / uuid (>= 7 hex)
-		.replace(/\b[0-9a-fA-F]{7,}\b/g, " ")
-		// semver: v2.3.1 hoặc 2.3.1
-		.replace(/\bv\d+(?:\.\d+)+\b/g, " phiên bản mới ")
-		.replace(/\b\d+\.\d+\.\d+(?:[-+][\w.-]+)?\b/g, " phiên bản mới ")
-		// dọn khoảng trắng
-		.replace(/\s{2,}/g, " ")
-		.replace(/[ \t]+([.,!?;:])/g, "$1")
-		.trim();
+	return (
+		text
+			// function-call style: createHash("sha256") → bỏ
+			.replace(/\b[\w.]+\s*\(\s*"[^"]*"\s*\)/g, " ")
+			// windows paths: C:\foo\bar
+			.replace(/[A-Za-z]:\\[^\s,;)\]]+/g, " ")
+			// file paths chứa dấu / với extension quen thuộc
+			.replace(
+				/\b[\w./-]+\/\w[\w./-]*\.(?:ts|tsx|js|jsx|py|json|md|toml|yaml|sh|ps1|wav|mp3|pyc)\b/g,
+				" ",
+			)
+			// tên file trần với extension quen thuộc
+			.replace(
+				/\b[\w-]+\.(?:ts|tsx|js|jsx|py|json|md|toml|yaml|sh|ps1)\b/g,
+				" ",
+			)
+			// long hex / commit hash / uuid (>= 7 hex)
+			.replace(/\b[0-9a-fA-F]{7,}\b/g, " ")
+			// semver: v2.3.1 hoặc 2.3.1
+			.replace(/\bv\d+(?:\.\d+)+\b/g, " phiên bản mới ")
+			.replace(/\b\d+\.\d+\.\d+(?:[-+][\w.-]+)?\b/g, " phiên bản mới ")
+			// dọn khoảng trắng
+			.replace(/\s{2,}/g, " ")
+			.replace(/[ \t]+([.,!?;:])/g, "$1")
+			.trim()
+	);
 }
 
 function stripMarkdownForSpeech(markdown: string): string {
@@ -1845,13 +1853,15 @@ async function summarizeText(
 		}
 	}
 
-	const summarizerPrompt = promptOverride ?? [
-		"You are a text-to-speech summarizer. Your job is to convert verbose assistant outputs into concise spoken summaries.",
-		"Summarize the following assistant response as a concise spoken summary, focusing on what was accomplished and key outcomes.",
-		"If the response contains salient points, suggestions, ideas, or important reasoning, make sure to preserve those details and the reasoning behind them.",
-		"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
-		"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
-	].join(" ");
+	const summarizerPrompt =
+		promptOverride ??
+		[
+			"You are a text-to-speech summarizer. Your job is to convert verbose assistant outputs into concise spoken summaries.",
+			"Summarize the following assistant response as a concise spoken summary, focusing on what was accomplished and key outcomes.",
+			"If the response contains salient points, suggestions, ideas, or important reasoning, make sure to preserve those details and the reasoning behind them.",
+			"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
+			"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
+		].join(" ");
 	const maxSummaryTokens = maxTokensOverride ?? 16384;
 
 	if (model.api === "openai-codex-responses") {
