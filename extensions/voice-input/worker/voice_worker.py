@@ -289,7 +289,7 @@ class LiveStreamingSession:
 @dataclass
 class SessionState:
     mode: str = "toggle"
-    wake_phrases: list[str] = field(default_factory=lambda: ["hey emi", "hey emy", "hey emilia", "hey emmy", "emi", "emy", "emilia", "emmy"])
+    wake_phrases: list[str] = field(default_factory=lambda: ["hi mei", "hi meilin"])
     listening: bool = False
     awake: bool = False
     speech_buffer: bytearray = field(default_factory=bytearray)
@@ -305,7 +305,7 @@ class SessionState:
 
 class VoiceHandler(socketserver.StreamRequestHandler):
     transcriber = Transcriber(sample_rate=env_int("VOICE_INPUT_SAMPLE_RATE", DEFAULT_SAMPLE_RATE))
-    session = SessionState(wake_phrases=env_json_list("VOICE_INPUT_WAKE_PHRASES", ["hey emi", "hey emy", "hey emilia", "hey emmy", "emi", "emy", "emilia", "emmy"]))
+    session = SessionState(wake_phrases=env_json_list("VOICE_INPUT_WAKE_PHRASES", ["hi mei", "hi meilin"]))
     work_queue: queue.Queue[bytes] = queue.Queue()
     worker_thread_started = False
     send_lock = threading.Lock()

@@ -2,14 +2,8 @@
   "mode": "toggle",
   "autoLaunchWorker": true,
   "wakePhrases": [
-    "hey emi",
-    "hey emy",
-    "hey emilia",
-    "hey emmy",
-    "emi",
-    "emy",
-    "emilia",
-    "emmy"
+    "hi mei",
+    "hi meilin"
   ],
   "sampleRate": 16000,
   "ffmpegPath": "",
