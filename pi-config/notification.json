@@ -18,10 +18,10 @@
     "baseUrl": "http://192.168.1.171:8880/v1",
     "profile": "Nu-01-Mai"
   },
-  "ttsOutputMode": "verbose",
+  "ttsOutputMode": "natural",
   "summarizer": {
     "skipThreshold": 4,
-    "provider": "pi",
-    "modelId": ""
+    "provider": "deepseek",
+    "modelId": "deepseek-v4-flash"
   }
 }

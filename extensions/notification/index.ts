@@ -54,7 +54,7 @@ type OmniVoiceSettings = {
 	profile?: string;
 };
 
-type TtsOutputMode = "verbose" | "shortened";
+type TtsOutputMode = "verbose" | "natural" | "shortened";
 
 type SummarizerSettings = {
 	provider?: string;
@@ -94,11 +94,22 @@ const DEFAULT_VLLM_OMNI_BASE_URL = "http://localhost:8091";
 const DEFAULT_VLLM_OMNI_MAX_NEW_TOKENS = 256;
 const DEFAULT_OMNIVOICE_BASE_URL = "http://192.168.1.171:8880/v1";
 const DEFAULT_OMNIVOICE_PROFILE = "Nu-01-Mai";
-const DEFAULT_TTS_OUTPUT_MODE: TtsOutputMode = "verbose";
+const DEFAULT_TTS_OUTPUT_MODE: TtsOutputMode = "natural";
 const DEFAULT_SUMMARIZER_SKIP_THRESHOLD = 4;
 const VLLM_OMNI_SAMPLE_RATE = 44100;
 const FISH_STREAM_SAMPLE_RATE = 44100;
-const TTS_OUTPUT_MODES = ["verbose", "shortened"] as const;
+const TTS_OUTPUT_MODES = ["verbose", "natural", "shortened"] as const;
+
+/** Prompt: chuyển câu trả lời có code/bảng/ký tự → văn nói tự nhiên, giữ đủ ý. */
+const NATURAL_SPEECH_PROMPT = [
+	"You are a text-to-speech converter. Convert the assistant's written response into natural, fluent spoken language that sounds human when read aloud.",
+	"Rules:",
+	"- Remove ALL code blocks, code snippets, inline code, file paths, tables, and technical symbols.",
+	"- Replace numeric codes, IDs, hashes, version numbers, and hex strings with natural descriptions (e.g. 'version 2 point 3' instead of 'v2.3') when they add no spoken value.",
+	"- Keep the full substance: main points, decisions, reasons, examples (described naturally), and conclusions.",
+	"- Do NOT shorten the response beyond removing unreadable content — preserve the complete meaning.",
+	"- Output only the spoken text: no markdown, no quotes, no code fences, no formatting.",
+].join(" ");
 
 function isTtsOutputMode(value: string): value is TtsOutputMode {
 	return (TTS_OUTPUT_MODES as readonly string[]).includes(value);
@@ -990,9 +1001,11 @@ function createVllmOmniWebSocket(
 ): Promise<{ send: (json: string) => void; close: () => void }> {
 	let parsedUrl: URL;
 	try {
-parsedUrl = new URL(wsUrl);
+		parsedUrl = new URL(wsUrl);
 	} catch {
-return Promise.reject(new Error(`Invalid vLLM-Omni WebSocket URL: ${wsUrl}`));
+		return Promise.reject(
+			new Error(`Invalid vLLM-Omni WebSocket URL: ${wsUrl}`),
+		);
 	}
 	const host = parsedUrl.hostname;
 	const port = parsedUrl.port ? parseInt(parsedUrl.port, 10) : 80;
@@ -1535,6 +1548,31 @@ async function synthesizeDiagnosticWav(
 	return { path, bytes: audioBytes.length };
 }
 
+/**
+ * Lưới an toàn cuối: loại bỏ các mẫu kỹ thuật còn sót (hash, version, path,
+ * function-call) sau khi LLM naturalize — đảm bảo TTS không bao giờ đọc code.
+ */
+function scrubTechnicalNoise(text: string): string {
+	return text
+		// function-call style: createHash("sha256") → bỏ
+		.replace(/\b[\w.]+\s*\(\s*"[^"]*"\s*\)/g, " ")
+		// windows paths: C:\foo\bar
+		.replace(/[A-Za-z]:\\[^\s,;)\]]+/g, " ")
+		// file paths chứa dấu / với extension quen thuộc
+		.replace(/\b[\w./-]+\/\w[\w./-]*\.(?:ts|tsx|js|jsx|py|json|md|toml|yaml|sh|ps1|wav|mp3|pyc)\b/g, " ")
+		// tên file trần với extension quen thuộc
+		.replace(/\b[\w-]+\.(?:ts|tsx|js|jsx|py|json|md|toml|yaml|sh|ps1)\b/g, " ")
+		// long hex / commit hash / uuid (>= 7 hex)
+		.replace(/\b[0-9a-fA-F]{7,}\b/g, " ")
+		// semver: v2.3.1 hoặc 2.3.1
+		.replace(/\bv\d+(?:\.\d+)+\b/g, " phiên bản mới ")
+		.replace(/\b\d+\.\d+\.\d+(?:[-+][\w.-]+)?\b/g, " phiên bản mới ")
+		// dọn khoảng trắng
+		.replace(/\s{2,}/g, " ")
+		.replace(/[ \t]+([.,!?;:])/g, "$1")
+		.trim();
+}
+
 function stripMarkdownForSpeech(markdown: string): string {
 	let text = markdown
 		// Remove code blocks
@@ -1711,13 +1749,15 @@ async function summarizeCodexText(
 			.map((line) => line.slice(5).trim())
 			.join("\n")
 			.trim();
-			if (!dataText || dataText === "[DONE]") continue;
-			let event: Record<string, unknown>;
-			try {
-				event = JSON.parse(dataText) as Record<string, unknown>;
-			} catch {
-				throw new Error(`Codex summarizer invalid JSON: ${dataText.slice(0, 200)}`);
-			}
+		if (!dataText || dataText === "[DONE]") continue;
+		let event: Record<string, unknown>;
+		try {
+			event = JSON.parse(dataText) as Record<string, unknown>;
+		} catch {
+			throw new Error(
+				`Codex summarizer invalid JSON: ${dataText.slice(0, 200)}`,
+			);
+		}
 		if (event.type === "error")
 			throw new Error(
 				`Codex summarizer error: ${String(event.message ?? event.code ?? dataText)}`,
@@ -1746,10 +1786,13 @@ async function summarizeText(
 	text: string,
 	settings: NotificationSettings,
 	ctx: ExtensionContext,
+	promptOverride?: string,
+	maxTokensOverride?: number,
 ): Promise<string | null> {
 	const summarizer = settings.summarizer;
 	// "pi" (hoặc không cấu hình) → dùng model hiện tại của Pi session.
-	const useCurrentPiModel = !summarizer?.provider || summarizer.provider === "pi";
+	const useCurrentPiModel =
+		!summarizer?.provider || summarizer.provider === "pi";
 
 	let model: ExtensionContext["model"];
 	if (useCurrentPiModel) {
@@ -1787,6 +1830,9 @@ async function summarizeText(
 	const baseUrl = model.baseUrl.replace(/\/+$/, "");
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
+		// Cloudflare tunnel (lite.truongcongdinh.org) chặn request không có browser UA
+		"User-Agent":
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 		...auth.headers,
 	};
 	if (auth.apiKey && !headers.Authorization && !headers["x-api-key"]) {
@@ -1799,14 +1845,14 @@ async function summarizeText(
 		}
 	}
 
-	const summarizerPrompt = [
+	const summarizerPrompt = promptOverride ?? [
 		"You are a text-to-speech summarizer. Your job is to convert verbose assistant outputs into concise spoken summaries.",
 		"Summarize the following assistant response as a concise spoken summary, focusing on what was accomplished and key outcomes.",
 		"If the response contains salient points, suggestions, ideas, or important reasoning, make sure to preserve those details and the reasoning behind them.",
 		"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
 		"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
 	].join(" ");
-	const maxSummaryTokens = 16384;
+	const maxSummaryTokens = maxTokensOverride ?? 16384;
 
 	if (model.api === "openai-codex-responses") {
 		try {
@@ -1931,6 +1977,15 @@ async function summarizeText(
 	return content.trim();
 }
 
+async function naturalizeText(
+	text: string,
+	settings: NotificationSettings,
+	ctx: ExtensionContext,
+): Promise<string | null> {
+	// Giữ đủ ý nhưng diễn đạt thành văn nói tự nhiên (bỏ code/bảng/ký tự).
+	return summarizeText(text, settings, ctx, NATURAL_SPEECH_PROMPT);
+}
+
 function getAssistantText(message: unknown): string {
 	const content = (message as { content?: unknown }).content;
 	if (!Array.isArray(content)) return "";
@@ -2011,7 +2066,7 @@ class TtsQueue {
 	}
 
 	enqueue(text: string): void {
-		const cleaned = stripMarkdownForSpeech(text);
+		const cleaned = scrubTechnicalNoise(stripMarkdownForSpeech(text));
 		if (!cleaned) return;
 
 		// Signal emote to enter talk state synchronously, before agent_end fires.
@@ -2110,25 +2165,33 @@ export default function notificationExtension(pi: ExtensionAPI) {
 		ctx: ExtensionContext,
 	): Promise<void> {
 		let ttsText = text;
-		if (settings.ttsOutputMode === "shortened") {
+		if (
+			settings.ttsOutputMode === "natural" ||
+			settings.ttsOutputMode === "shortened"
+		) {
 			try {
 				const cleaned = stripMarkdownForSpeech(text);
 				const threshold =
 					settings.summarizer?.skipThreshold ??
 					DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
 				if (countSentences(cleaned) > threshold) {
-					const summary = await summarizeText(cleaned, settings, ctx);
-					if (summary === null) return; // error already shown, skip TTS
-					ttsText = summary;
+					// natural = giữ đủ ý, diễn đạt tự nhiên (bỏ code/bảng/ký tự)
+					// shortened = tóm gọn 3-5 câu
+					const transformed =
+						settings.ttsOutputMode === "shortened"
+							? await summarizeText(cleaned, settings, ctx)
+							: await naturalizeText(cleaned, settings, ctx);
+					if (transformed === null) return; // error already shown, skip TTS
+					ttsText = transformed;
 					pi.sendMessage({
 						customType: SUMMARY_MESSAGE_TYPE,
-						content: summary,
+						content: transformed,
 						display: true,
 						details: { timestamp: Date.now() },
 					});
 				}
 			} catch (error) {
-				notifyFailure(ctx, `Summarizer failed: ${formatError(error)}`);
+				notifyFailure(ctx, `TTS transform failed: ${formatError(error)}`);
 				return;
 			}
 		}
@@ -2952,9 +3015,14 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 			}
 			if (provider === "pi") {
 				// Dùng model hiện tại của Pi session
-				settings.summarizer = { ...settings.summarizer, provider: "pi", modelId: "" };
+				settings.summarizer = {
+					...settings.summarizer,
+					provider: "pi",
+					modelId: "",
+				};
 				persistSettings(ctx);
-				if (ctx) ctx.ui.notify("Summarizer will use the current Pi model", "info");
+				if (ctx)
+					ctx.ui.notify("Summarizer will use the current Pi model", "info");
 				return;
 			}
 			if (!modelId) {
