@@ -21,7 +21,7 @@
   "ttsOutputMode": "verbose",
   "summarizer": {
     "skipThreshold": 4,
-    "provider": "ollama",
-    "modelId": "qwen3:1.7b"
+    "provider": "pi",
+    "modelId": ""
   }
 }

@@ -988,7 +988,12 @@ function createVllmOmniWebSocket(
 	onClose: () => void,
 	onError: (error: Error) => void,
 ): Promise<{ send: (json: string) => void; close: () => void }> {
-	const parsedUrl = new URL(wsUrl);
+	let parsedUrl: URL;
+	try {
+parsedUrl = new URL(wsUrl);
+	} catch {
+return Promise.reject(new Error(`Invalid vLLM-Omni WebSocket URL: ${wsUrl}`));
+	}
 	const host = parsedUrl.hostname;
 	const port = parsedUrl.port ? parseInt(parsedUrl.port, 10) : 80;
 	const path = parsedUrl.pathname || "/";
@@ -1118,7 +1123,9 @@ function createVllmOmniWebSocket(
 						try {
 							sendFrame(new Uint8Array(), 0x8);
 							socket.end();
-						} catch {}
+						} catch {
+							// Best-effort close; socket may already be destroyed
+						}
 					},
 				});
 			}
@@ -1219,7 +1226,9 @@ async function streamVllmOmniPcmToFfplay(
 						const str = new TextDecoder().decode(raw);
 						event = JSON.parse(str);
 						isJson = true;
-					} catch {}
+					} catch {
+						// Non-JSON frame — không phải event, bỏ qua
+					}
 
 					if (isJson && event) {
 						const etype = String(event.type);
@@ -1333,7 +1342,9 @@ async function synthesizeVllmOmniWav(
 			settled = true;
 			try {
 				ws?.close();
-			} catch {}
+			} catch {
+				// Best-effort close; socket may already be destroyed
+			}
 			if (error) reject(error);
 			else resolve();
 		};
@@ -1348,7 +1359,9 @@ async function synthesizeVllmOmniWav(
 						const str = new TextDecoder().decode(raw);
 						event = JSON.parse(str);
 						isJson = true;
-					} catch {}
+					} catch {
+						// Non-JSON frame — không phải event, bỏ qua
+					}
 
 					if (isJson && event) {
 						const etype = String(event.type);
@@ -1412,14 +1425,12 @@ async function synthesizeOmniVoiceWav(
 	const baseUrl = getOmniVoiceBaseUrl(settings);
 	const profile = getOmniVoiceProfile(settings);
 
-	const response = await fetch(joinUrl(baseUrl, "audio/speech"), {
+	const response = await fetch(joinUrl(baseUrl, "tts"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
-			model: "omnivoice",
-			voice: profile,
-			input: text,
-			response_format: "wav",
+			text,
+			profile_ids: profile,
 		}),
 	});
 	await ensureOk(response);
@@ -1700,8 +1711,13 @@ async function summarizeCodexText(
 			.map((line) => line.slice(5).trim())
 			.join("\n")
 			.trim();
-		if (!dataText || dataText === "[DONE]") continue;
-		const event = JSON.parse(dataText) as Record<string, unknown>;
+			if (!dataText || dataText === "[DONE]") continue;
+			let event: Record<string, unknown>;
+			try {
+				event = JSON.parse(dataText) as Record<string, unknown>;
+			} catch {
+				throw new Error(`Codex summarizer invalid JSON: ${dataText.slice(0, 200)}`);
+			}
 		if (event.type === "error")
 			throw new Error(
 				`Codex summarizer error: ${String(event.message ?? event.code ?? dataText)}`,
@@ -1732,21 +1748,32 @@ async function summarizeText(
 	ctx: ExtensionContext,
 ): Promise<string | null> {
 	const summarizer = settings.summarizer;
-	if (!summarizer?.provider || !summarizer?.modelId) {
-		notifyFailure(
-			ctx,
-			"Summarizer not configured. Select a model in the notification menu.",
-		);
-		return null;
-	}
+	// "pi" (hoặc không cấu hình) → dùng model hiện tại của Pi session.
+	const useCurrentPiModel = !summarizer?.provider || summarizer.provider === "pi";
 
-	const model = ctx.modelRegistry.find(summarizer.provider, summarizer.modelId);
-	if (!model) {
-		notifyFailure(
-			ctx,
-			`Summarizer model "${summarizer.provider}:${summarizer.modelId}" not found.`,
-		);
-		return null;
+	let model: ExtensionContext["model"];
+	if (useCurrentPiModel) {
+		model = ctx.model;
+		if (!model) {
+			notifyFailure(ctx, "No active Pi model available for summarization.");
+			return null;
+		}
+	} else {
+		if (!summarizer?.provider || !summarizer?.modelId) {
+			notifyFailure(
+				ctx,
+				"Summarizer not configured. Select a model in the notification menu.",
+			);
+			return null;
+		}
+		model = ctx.modelRegistry.find(summarizer.provider, summarizer.modelId);
+		if (!model) {
+			notifyFailure(
+				ctx,
+				`Summarizer model "${summarizer.provider}:${summarizer.modelId}" not found.`,
+			);
+			return null;
+		}
 	}
 
 	const auth = await ctx.modelRegistry
@@ -1959,7 +1986,7 @@ function getStatus(settings: NotificationSettings): string {
 		`OmniVoice base URL: ${settings.omnivoice?.baseUrl ?? DEFAULT_OMNIVOICE_BASE_URL}`,
 		`OmniVoice profile: ${settings.omnivoice?.profile ?? DEFAULT_OMNIVOICE_PROFILE}`,
 		`TTS output: ${settings.ttsOutputMode ?? DEFAULT_TTS_OUTPUT_MODE}`,
-		`Summarizer model: ${settings.summarizer?.provider && settings.summarizer?.modelId ? `${settings.summarizer.provider}:${settings.summarizer.modelId}` : "not set"}`,
+		`Summarizer model: ${settings.summarizer?.provider === "pi" || !settings.summarizer?.provider ? "pi (current model)" : settings.summarizer?.provider && settings.summarizer?.modelId ? `${settings.summarizer.provider}:${settings.summarizer.modelId}` : "not set"}`,
 		`Summarizer skip threshold: ${settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD} sentences`,
 	].join("\n");
 }
@@ -2195,9 +2222,12 @@ export default function notificationExtension(pi: ExtensionAPI) {
 			settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE;
 		const currentOutputMode = settings.ttsOutputMode ?? DEFAULT_TTS_OUTPUT_MODE;
 		const summarizerModelLabel =
-			settings.summarizer?.provider && settings.summarizer?.modelId
-				? `${settings.summarizer.provider}:${settings.summarizer.modelId}`
-				: "not set";
+			settings.summarizer?.provider === "pi" ||
+			(!settings.summarizer?.provider && !settings.summarizer?.modelId)
+				? "pi (current model)"
+				: settings.summarizer?.provider && settings.summarizer?.modelId
+					? `${settings.summarizer.provider}:${settings.summarizer.modelId}`
+					: "not set";
 		const summarizerThreshold =
 			settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
 
@@ -2436,24 +2466,36 @@ export default function notificationExtension(pi: ExtensionAPI) {
 						children: () => {
 							const models =
 								getCurrentCtx()?.modelRegistry.getAvailable() ?? [];
+							const piSelected =
+								!settings.summarizer?.provider ||
+								settings.summarizer?.provider === "pi";
+							const piOption = {
+								type: "action" as const,
+								id: "summarizer-model:pi:",
+								label: `${piSelected ? "▸ " : ""}pi (current model)`,
+							};
 							if (models.length === 0)
 								return [
+									piOption,
 									{
 										type: "action" as const,
 										id: "summarizer:no-models",
 										label: "No authenticated models available",
 									},
 								];
-							return models.map((m: any) => {
-								const selected =
-									settings.summarizer?.provider === m.provider &&
-									settings.summarizer?.modelId === m.id;
-								return {
-									type: "action" as const,
-									id: `summarizer-model:${encodeURIComponent(m.provider)}:${encodeURIComponent(m.id)}`,
-									label: `${selected ? "▸ " : ""}${m.provider}:${m.id} (${m.name})`,
-								};
-							});
+							return [
+								piOption,
+								...models.map((m: any) => {
+									const selected =
+										settings.summarizer?.provider === m.provider &&
+										settings.summarizer?.modelId === m.id;
+									return {
+										type: "action" as const,
+										id: `summarizer-model:${encodeURIComponent(m.provider)}:${encodeURIComponent(m.id)}`,
+										label: `${selected ? "▸ " : ""}${m.provider}:${m.id} (${m.name})`,
+									};
+								}),
+							];
 						},
 					},
 					{
@@ -2904,7 +2946,18 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 			const [, encodedProvider, encodedModelId] = id.split(":");
 			const provider = decodeURIComponent(encodedProvider ?? "");
 			const modelId = decodeURIComponent(encodedModelId ?? "");
-			if (!provider || !modelId) {
+			if (!provider) {
+				if (ctx) ctx.ui.notify("Could not parse selected model.", "error");
+				return;
+			}
+			if (provider === "pi") {
+				// Dùng model hiện tại của Pi session
+				settings.summarizer = { ...settings.summarizer, provider: "pi", modelId: "" };
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify("Summarizer will use the current Pi model", "info");
+				return;
+			}
+			if (!modelId) {
 				if (ctx) ctx.ui.notify("Could not parse selected model.", "error");
 				return;
 			}
