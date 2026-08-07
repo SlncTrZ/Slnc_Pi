@@ -561,11 +561,9 @@ def normalize_text(text: str) -> str:
 
 def wake_word_matches(candidate: str, expected: str) -> bool:
     aliases = {
-        "hey": {"hey", "hay"},
-        "emi": {"emi", "emy", "emmy", "amy"},
-        "emy": {"emi", "emy", "emmy", "amy"},
-        "emmy": {"emi", "emy", "emmy", "amy"},
-        "emilia": {"emilia", "amelia"},
+        "hi": {"hi", "hay", "hai"},
+        "mei": {"mei", "may", "mai", "me"},
+        "meilin": {"meilin", "maylin", "mai linh", "mi linh", "me linh", "may linh"},
     }
     return candidate in aliases.get(expected, {expected})
 

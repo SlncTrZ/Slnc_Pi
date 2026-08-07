@@ -781,9 +781,9 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
 
 	function wakeWordMatches(candidate: string, expected: string): boolean {
 		const aliases: Record<string, string[]> = {
-			hi: ["hi", "hay"],
-			mei: ["mei", "may", "mai", "mây"],
-			meilin: ["meilin", "maylin", "mai linh", "mi linh"],
+			hi: ["hi", "hay", "hai"],
+			mei: ["mei", "may", "mai", "me", "mây", "mê"],
+			meilin: ["meilin", "maylin", "mai linh", "mi linh", "me linh", "mây linh", "mê linh", "may linh"],
 		};
 		return (aliases[expected] ?? [expected]).includes(candidate);
 	}
@@ -792,7 +792,7 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
 		text: string,
 		phrases: string[],
 	): { phrase: string; remainder: string } | null {
-		const tokens = Array.from(text.matchAll(/[a-zA-Z0-9]+/g), (match) => ({
+		const tokens = Array.from(text.matchAll(/[a-zA-Z0-9\u00C0-\u1EFF]+/g), (match) => ({
 			word: match[0].toLowerCase(),
 			start: match.index ?? 0,
 			end: (match.index ?? 0) + match[0].length,

@@ -81,7 +81,7 @@ Default wake phrases include:
 hi mei, hi meilin
 ```
 
-Wake matching tolerates common ASR spelling variants for these names, such as `may`/`mai` for `mei` and `mai linh` for `meilin`.
+Wake matching tolerates common ASR spelling variants for these names, such as `may`/`mai`/`mây`/`mê` for `mei` and `mai linh`/`mây linh`/`mê linh` for `meilin`.
 
 ## Listening Feedback
 
