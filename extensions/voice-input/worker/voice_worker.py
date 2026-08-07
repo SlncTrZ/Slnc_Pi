@@ -57,7 +57,9 @@ def process_exists(pid: int) -> bool:
     if os.name == "nt":
         # Windows OpenProcess check without adding a psutil dependency.
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
         if handle:
             ctypes.windll.kernel32.CloseHandle(handle)
             return True
@@ -101,7 +103,12 @@ class Transcriber:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def download_model(self, emit) -> None:
-        emit({"type": "download_progress", "message": f"downloading {self.model_id} to Hugging Face cache"})
+        emit(
+            {
+                "type": "download_progress",
+                "message": f"downloading {self.model_id} to Hugging Face cache",
+            }
+        )
         path = snapshot_download(self.model_id)
         emit({"type": "download_progress", "message": f"download complete: {path}"})
 
@@ -113,17 +120,31 @@ class Transcriber:
                 return
             emit({"type": "status", "status": "starting", "detail": "loading Voxtral"})
             import torch
-            from transformers import VoxtralRealtimeForConditionalGeneration, VoxtralRealtimeProcessor
+            from transformers import (
+                VoxtralRealtimeForConditionalGeneration,
+                VoxtralRealtimeProcessor,
+            )
 
             self.torch = torch
             self.torch_version = getattr(torch, "__version__", "unknown")
             self.cuda_available = bool(torch.cuda.is_available())
-            if not self.cuda_available and os.environ.get("VOICE_INPUT_REQUIRE_CUDA", "1") != "0":
+            if (
+                not self.cuda_available
+                and os.environ.get("VOICE_INPUT_REQUIRE_CUDA", "1") != "0"
+            ):
                 raise RuntimeError(
                     f"CUDA is not available to torch {self.torch_version}. Install a CUDA PyTorch build (cu128 for Blackwell) or set VOICE_INPUT_REQUIRE_CUDA=0 to allow slow CPU fallback."
                 )
-            self.cuda_device = torch.cuda.get_device_name(0) if self.cuda_available else "cpu"
-            emit({"type": "status", "status": "starting", "detail": f"torch={self.torch_version} cuda={self.cuda_available} device={self.cuda_device}"})
+            self.cuda_device = (
+                torch.cuda.get_device_name(0) if self.cuda_available else "cpu"
+            )
+            emit(
+                {
+                    "type": "status",
+                    "status": "starting",
+                    "detail": f"torch={self.torch_version} cuda={self.cuda_available} device={self.cuda_device}",
+                }
+            )
             self.processor = VoxtralRealtimeProcessor.from_pretrained(self.model_id)
             dtype = torch.bfloat16 if self.cuda_available else torch.float32
             device_map = "cuda:0" if self.cuda_available else "cpu"
@@ -133,7 +154,15 @@ class Transcriber:
                 torch_dtype=dtype,
             )
             self.model.eval()
-            emit({"type": "ready", "pid": os.getpid(), "torchVersion": self.torch_version, "cudaAvailable": self.cuda_available, "cudaDevice": self.cuda_device})
+            emit(
+                {
+                    "type": "ready",
+                    "pid": os.getpid(),
+                    "torchVersion": self.torch_version,
+                    "cudaAvailable": self.cuda_available,
+                    "cudaDevice": self.cuda_device,
+                }
+            )
 
     def transcribe(self, pcm: bytes, emit, *, max_new_tokens: int = 192) -> str:
         self.ensure_loaded(emit)
@@ -146,7 +175,9 @@ class Transcriber:
         if audio_i16.size == 0:
             return ""
         audio = audio_i16.astype(np.float32) / 32768.0
-        inputs = self.processor(audio, sampling_rate=self.sample_rate, return_tensors="pt")
+        inputs = self.processor(
+            audio, sampling_rate=self.sample_rate, return_tensors="pt"
+        )
         inputs = inputs.to(self.model.device, dtype=self.model.dtype)
         with self.torch.inference_mode():
             outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
@@ -265,7 +296,12 @@ class LiveStreamingSession:
                         max_new_tokens=192,
                     )
             except Exception as exc:
-                self.emit({"type": "error", "message": f"streaming generate failed: {exc}\n{traceback.format_exc()}"})
+                self.emit(
+                    {
+                        "type": "error",
+                        "message": f"streaming generate failed: {exc}\n{traceback.format_exc()}",
+                    }
+                )
 
         def run_streamer() -> None:
             try:
@@ -278,7 +314,12 @@ class LiveStreamingSession:
                     if text:
                         self.emit({"type": "partial", "text": text})
             except Exception as exc:
-                self.emit({"type": "error", "message": f"streaming decode failed: {exc}\n{traceback.format_exc()}"})
+                self.emit(
+                    {
+                        "type": "error",
+                        "message": f"streaming decode failed: {exc}\n{traceback.format_exc()}",
+                    }
+                )
 
         self.generate_thread = threading.Thread(target=run_generate, daemon=True)
         self.streamer_thread = threading.Thread(target=run_streamer, daemon=True)
@@ -304,8 +345,12 @@ class SessionState:
 
 
 class VoiceHandler(socketserver.StreamRequestHandler):
-    transcriber = Transcriber(sample_rate=env_int("VOICE_INPUT_SAMPLE_RATE", DEFAULT_SAMPLE_RATE))
-    session = SessionState(wake_phrases=env_json_list("VOICE_INPUT_WAKE_PHRASES", ["hi mei", "hi meilin"]))
+    transcriber = Transcriber(
+        sample_rate=env_int("VOICE_INPUT_SAMPLE_RATE", DEFAULT_SAMPLE_RATE)
+    )
+    session = SessionState(
+        wake_phrases=env_json_list("VOICE_INPUT_WAKE_PHRASES", ["hi mei", "hi meilin"])
+    )
     work_queue: queue.Queue[bytes] = queue.Queue()
     worker_thread_started = False
     send_lock = threading.Lock()
@@ -329,19 +374,22 @@ class VoiceHandler(socketserver.StreamRequestHandler):
     def handle_message(self, msg: dict[str, Any]) -> None:
         msg_type = msg.get("type")
         if msg_type == "ping":
-            self.emit({
-                "type": "pong",
-                "id": msg.get("id"),
-                "pid": os.getpid(),
-                "modelLoaded": self.transcriber.model is not None and self.transcriber.processor is not None,
-                "torchVersion": self.transcriber.torch_version,
-                "cudaAvailable": self.transcriber.cuda_available,
-                "cudaDevice": self.transcriber.cuda_device,
-                "listening": self.session.listening,
-                "mode": self.session.mode,
-                "awake": self.session.awake,
-                "lastError": self.session.last_error,
-            })
+            self.emit(
+                {
+                    "type": "pong",
+                    "id": msg.get("id"),
+                    "pid": os.getpid(),
+                    "modelLoaded": self.transcriber.model is not None
+                    and self.transcriber.processor is not None,
+                    "torchVersion": self.transcriber.torch_version,
+                    "cudaAvailable": self.transcriber.cuda_available,
+                    "cudaDevice": self.transcriber.cuda_device,
+                    "listening": self.session.listening,
+                    "mode": self.session.mode,
+                    "awake": self.session.awake,
+                    "lastError": self.session.last_error,
+                }
+            )
             return
         if msg_type == "start":
             self.session.mode = str(msg.get("mode") or "toggle")
@@ -355,7 +403,9 @@ class VoiceHandler(socketserver.StreamRequestHandler):
             self.session.utterance_buffer.clear()
             self.session.last_interim_time = 0.0
             self.close_stream(emit_final=False)
-            self.emit({"type": "status", "status": "listening", "detail": self.session.mode})
+            self.emit(
+                {"type": "status", "status": "listening", "detail": self.session.mode}
+            )
             threading.Thread(target=lambda: self.safe_load_model(), daemon=True).start()
             return
         if msg_type == "stop":
@@ -385,7 +435,9 @@ class VoiceHandler(socketserver.StreamRequestHandler):
             self.session.in_speech = False
             self.session.last_interim_time = 0.0
             self.session.awake = False
-            self.emit({"type": "status", "status": "listening", "detail": "wake gate reset"})
+            self.emit(
+                {"type": "status", "status": "listening", "detail": "wake gate reset"}
+            )
             return
         if msg_type == "shutdown":
             self.server.shutdown()
@@ -398,7 +450,14 @@ class VoiceHandler(socketserver.StreamRequestHandler):
         now = time.monotonic()
         if now - self.session.last_level_emit_time >= 1.0:
             self.session.last_level_emit_time = now
-            self.emit({"type": "audio_level", "energy": energy, "threshold": ENERGY_THRESHOLD, "inSpeech": self.session.in_speech})
+            self.emit(
+                {
+                    "type": "audio_level",
+                    "energy": energy,
+                    "threshold": ENERGY_THRESHOLD,
+                    "inSpeech": self.session.in_speech,
+                }
+            )
         if energy >= ENERGY_THRESHOLD:
             if not self.session.in_speech and self.session.pre_roll_buffer:
                 self.session.speech_buffer.extend(self.session.pre_roll_buffer)
@@ -437,7 +496,9 @@ class VoiceHandler(socketserver.StreamRequestHandler):
                 self.session.stream = LiveStreamingSession(self.transcriber, self.emit)
             self.session.stream.feed_pcm(data)
         except Exception as exc:
-            self.session.last_error = f"stream feed failed: {exc}\n{traceback.format_exc()}"
+            self.session.last_error = (
+                f"stream feed failed: {exc}\n{traceback.format_exc()}"
+            )
             self.emit({"type": "error", "message": self.session.last_error})
 
     def close_stream(self, emit_final: bool) -> str:
@@ -459,7 +520,9 @@ class VoiceHandler(socketserver.StreamRequestHandler):
         if now - self.session.last_interim_time < INTERIM_TRANSCRIBE_SECONDS:
             return
         self.session.last_interim_time = now
-        self.emit({"type": "status", "status": "transcribing", "detail": "streaming preview"})
+        self.emit(
+            {"type": "status", "status": "transcribing", "detail": "streaming preview"}
+        )
         self.work_queue.put({"pcm": bytes(self.session.speech_buffer), "interim": True})
 
     def flush_segment(self, force: bool) -> None:
@@ -470,7 +533,14 @@ class VoiceHandler(socketserver.StreamRequestHandler):
             return
         seconds = len(data) / 2 / self.transcriber.sample_rate
         if not force and seconds < MIN_SPEECH_SECONDS:
-            self.emit({"type": "audio_rejected", "reason": "too_short", "seconds": seconds, "minSeconds": MIN_SPEECH_SECONDS})
+            self.emit(
+                {
+                    "type": "audio_rejected",
+                    "reason": "too_short",
+                    "seconds": seconds,
+                    "minSeconds": MIN_SPEECH_SECONDS,
+                }
+            )
             return
         self.emit({"type": "audio_accepted", "seconds": seconds})
         if self.streaming_enabled():
@@ -492,19 +562,31 @@ class VoiceHandler(socketserver.StreamRequestHandler):
             data = work["pcm"] if isinstance(work, dict) else work
             interim = bool(work.get("interim")) if isinstance(work, dict) else False
             try:
-                self.emit({"type": "status", "status": "transcribing", "detail": "interim" if interim else "final"})
-                text = self.transcriber.transcribe(data, self.emit, max_new_tokens=96 if interim else 192)
+                self.emit(
+                    {
+                        "type": "status",
+                        "status": "transcribing",
+                        "detail": "interim" if interim else "final",
+                    }
+                )
+                text = self.transcriber.transcribe(
+                    data, self.emit, max_new_tokens=96 if interim else 192
+                )
                 if not text:
                     continue
                 if self.session.mode == "always":
-                    phrase, remainder = match_wake_phrase(text, self.session.wake_phrases)
+                    phrase, remainder = match_wake_phrase(
+                        text, self.session.wake_phrases
+                    )
                     if not self.session.awake:
                         if phrase:
                             self.session.awake = True
                             self.emit({"type": "wake", "phrase": phrase})
                             text = remainder
                         else:
-                            self.emit({"type": "audio_rejected", "reason": "wake_not_found"})
+                            self.emit(
+                                {"type": "audio_rejected", "reason": "wake_not_found"}
+                            )
                             continue
                     elif phrase:
                         text = remainder
@@ -516,7 +598,12 @@ class VoiceHandler(socketserver.StreamRequestHandler):
             except Exception as exc:
                 self.emit({"type": "error", "message": str(exc)})
             finally:
-                self.emit({"type": "status", "status": "listening" if self.session.listening else "ready"})
+                self.emit(
+                    {
+                        "type": "status",
+                        "status": "listening" if self.session.listening else "ready",
+                    }
+                )
 
     def safe_load_model(self) -> None:
         try:
@@ -569,7 +656,10 @@ def wake_word_matches(candidate: str, expected: str) -> bool:
 
 
 def match_wake_phrase(text: str, phrases: list[str]) -> tuple[str | None, str]:
-    tokens = [(match.group(0).lower(), match.start(), match.end()) for match in re.finditer(r"[a-zA-Z0-9]+", text)]
+    tokens = [
+        (match.group(0).lower(), match.start(), match.end())
+        for match in re.finditer(r"[a-zA-Z0-9]+", text)
+    ]
     if not tokens:
         return None, text
 
@@ -583,8 +673,11 @@ def match_wake_phrase(text: str, phrases: list[str]) -> tuple[str | None, str]:
         # preventing unrelated later mentions from opening the gate.
         max_start = min(12, max(0, len(tokens) - phrase_len))
         for start in range(max_start + 1):
-            candidate = [word for word, _, _ in tokens[start:start + phrase_len]]
-            if len(candidate) != phrase_len or any(not wake_word_matches(word, phrase_words[i]) for i, word in enumerate(candidate)):
+            candidate = [word for word, _, _ in tokens[start : start + phrase_len]]
+            if len(candidate) != phrase_len or any(
+                not wake_word_matches(word, phrase_words[i])
+                for i, word in enumerate(candidate)
+            ):
                 continue
             phrase_end = tokens[start + phrase_len - 1][2]
             remainder = text[phrase_end:].lstrip(" \t\r\n,.!?;:-—")

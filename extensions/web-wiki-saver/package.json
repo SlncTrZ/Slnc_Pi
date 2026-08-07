@@ -1,0 +1,12 @@
+{
+  "name": "web-wiki-saver",
+  "private": true,
+  "description": "Auto-save web search results (query + answer + sources) to Qdrant omniscience_wiki wing",
+  "keywords": ["pi-package", "pi-extension"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

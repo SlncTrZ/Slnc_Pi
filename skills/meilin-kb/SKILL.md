@@ -17,15 +17,30 @@ allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 ## 1. Kết nối
 
 | Component | URL | Auth |
-|-----------|-----|------|
-| **Qdrant REST API** | `http://192.168.1.227:6333` | `api-key: wQ72uGxOv1kpX5ETBo1FEuKeYWf8ytac11cJIcOg` |
+| ----------- | ----- | ------ |
+| **Qdrant REST API** | `http://192.168.1.227:6333` | `api-key` (đọc từ secrets, KHÔNG hardcode) |
 | **Ollama Embedding** | `http://192.168.1.227:11434` | — |
 | **Ollama Fallback** | `http://192.168.1.171:11434` | — |
+
+> 🔑 **Lấy API key từ `~/.pi/agent/secrets/qdrant.json`** (gitignored) — không bao giờ hardcode key trong code/skill:
+>
+> ```javascript
+> // === function: getApiKey() ===
+> const { readFileSync, existsSync } = require('node:fs');
+> const { join } = require('node:path');
+> const { homedir } = require('node:os');
+> const SECRETS = join(homedir(), '.pi', 'agent', 'secrets', 'qdrant.json');
+> const API_KEY = process.env.QDRANT_API_KEY ||
+>   (existsSync(SECRETS)
+>     ? JSON.parse(readFileSync(SECRETS, 'utf-8')).qdrant.api_key
+>     : '');
+> if (!API_KEY) throw new Error('Thiếu QDRANT_API_KEY — tạo ~/.pi/agent/secrets/qdrant.json');
+> ```
 
 ### 6-Wing Collections (all 768d, Cosine distance)
 
 | Wing | Collection | Mục đích |
-|------|------------|----------|
+| ------ | ------------ | ---------- |
 | `tcdserver` | `meilin_tcdserver` | Server infrastructure, docker, deployment |
 | `openclaw` | `meilin_openclaw` | AI agents, skills, LLM, MeiLin project |
 | `robotics` | `meilin_robotics` | Hardware, STM32, Raspberry Pi, sensors |
@@ -93,7 +108,7 @@ async function knowledgeStore({ content, wing, topic, entity_name, entity_type, 
   const resp = await fetch(`http://192.168.1.227:6333/collections/meilin_${wing}/points`, {
     method: 'PUT',
     headers: {
-      'api-key': 'wQ72uGxOv1kpX5ETBo1FEuKeYWf8ytac11cJIcOg',
+      'api-key': 'API_KEY',
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ points: [point] })
@@ -149,7 +164,7 @@ async function knowledgeSearch({ query, wing, topic, limit, threshold }) {
   const resp = await fetch(`http://192.168.1.227:6333/collections/${wing ? 'meilin_' + wing : 'meilin_code_chronicles'}/points/search`, {
     method: 'POST',
     headers: {
-      'api-key': 'wQ72uGxOv1kpX5ETBo1FEuKeYWf8ytac11cJIcOg',
+      'api-key': 'API_KEY',
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -293,14 +308,41 @@ async function conversationRecall({ query, channel, limit }) {
 2. Lưu vào wing `conversation` với channel `pi`
 3. (Optional) Export ra file `.md` trong thư mục chỉ định
 
+    ---
+
+## 8. Web Research → Wiki Wing Protocol (BẮT BUỘC khi search web)
+
+> **Rule từ Anh (2026-08-07):** Mỗi khi Anh yêu cầu search/nghiên cứu thông tin — PHẢI check wiki trước, trả lời trực tiếp nếu có; chỉ web search khi wiki không đủ. Sau khi tổng hợp xong — PHẢI lưu vào wiki wing.
+
+### 8.1 Flow chuẩn
+
+```text
+Anh: "Nghiên cứu về model A"
+  ┌─> B1: knowledgeSearch({ query: 'model A', wing: 'omniscience_wiki', threshold: 0.7 })
+  │       ├─> Có kết quả score ≥ 0.7 → trả lời trực tiếp từ wiki (kèm nguồn), KHÔNG web search
+  │       └─> Không có (hoặc cần cập nhật mới) → B2
+  └─> B2: web_search(query) → tổng hợp answer
+        └─> B3: trả lời Anh
+              └─> B4: save_web_to_wiki({ query, answer })  ← tự động bởi extension web-wiki-saver
+                    (hoặc gọi tool save_web_to_wiki thủ công nếu cần thêm note)
+```
+
+### 8.2 Ghi chú
+
+- Extension `web-wiki-saver` tự bắt kết quả `web_search`/`source_check` → lưu vào `meilin_omniscience_wiki` (wing `omniscience_wiki`, entity_type `web_research`).
+- Lần sau search cùng chủ đề → wiki trả kết quả → trả lời trực tiếp, tiết kiệm web search.
+- Nếu kết quả web rất mới (đòi hỏi recency) → ưu tiên web search, rồi vẫn lưu wiki để làm mới.
+
 ---
 
-## 8. Quick Reference — Node.js Template
+## 9. Quick Reference — Node.js Template
 
 Dùng đoạn này để test nhanh trong bash:
 
 ```bash
 node -e "
+const {readFileSync,existsSync}=require('node:fs');
+const API_KEY = process.env.QDRANT_API_KEY || (existsSync(require('node:os').homedir()+'/.pi/agent/secrets/qdrant.json') ? JSON.parse(readFileSync(require('node:os').homedir()+'/.pi/agent/secrets/qdrant.json','utf-8')).qdrant.api_key : '');
 async function main() {
   const e = await (await fetch('http://192.168.1.227:11434/api/embeddings', {
     method: 'POST',
@@ -311,7 +353,7 @@ async function main() {
 
   const s = await (await fetch('http://192.168.1.227:6333/collections/meilin_tcdserver/points/search', {
     method: 'POST',
-    headers: {'api-key':'wQ72uGxOv1kpX5ETBo1FEuKeYWf8ytac11cJIcOg','Content-Type':'application/json'},
+    headers: {'api-key':API_KEY,'Content-Type':'application/json'},
     body: JSON.stringify({vector:e.embedding, limit:3, with_payload:true, score_threshold:0.5})
   })).json();
   s.result?.forEach(r => console.log('Score:', r.score, '|', (r.payload.content||'').substring(0,80)));
@@ -322,10 +364,10 @@ main().catch(e => console.error(e));
 
 ---
 
-## 9. 3-Tier Prioritization (từ AGENTS.md)
+## 10. 3-Tier Prioritization (từ AGENTS.md)
 
 | Tier | Khi nào | Action |
-|------|---------|--------|
+| ------ | --------- | -------- |
 | **Tier 1** | Có thể đọc file trực tiếp | Dùng `read`/`ctx_read` — SKIP RAG |
 | **Tier 2** | Task mới → Skip RAG | Không tra Qdrant |
 | **Tier 2** | Task liên quan/debug → Tier 3 | Chuyển xuống dưới |

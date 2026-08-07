@@ -3,22 +3,63 @@
  *
  * Cơ chế:
  *   - Mỗi turn_end: ghi user + assistant messages vào buffer (bỏ tool calls)
- *   - session_shutdown / "lưu lại": upsert toàn bộ buffer vào meilin_conversation
+ *   - Auto-save mỗi SAVE_THRESHOLD turn + session_shutdown + manual "lưu lại"
+ *   - Mỗi session = 1 point (ID deterministic từ session_id) → upsert đè,
+ *     KHÔNG trùng lặp dữ liệu như version cũ (1031 points → ~1/session)
  *
- * Wing: conversation | Topic: chat_history | Updated: 2026-06-15 15:15
+ * Wing: conversation | Topic: chat_history | Updated: 2026-08-07 09:20
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 
 // ─── Config ──────────────────────────────────────────────────────────────
+const SECRETS_PATH =
+	process.env.QDRANT_SECRETS_PATH ||
+	require("node:path").join(require("node:os").homedir(), ".pi", "agent", "secrets", "qdrant.json");
+
 const QDRANT_URL = process.env.QDRANT_URL || "http://192.168.1.227:6333";
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.227:11434";
-const API_KEY =
-	process.env.QDRANT_API_KEY || "wQ72uGxOv1kpX5ETBo1FEuKeYWf8ytac11cJIcOg";
 const EMBED_MODEL = "nomic-embed-text";
 const CHANNEL = "pi";
 const SAVE_THRESHOLD = 10; // auto-save mỗi 10 turn + shutdown + manual
+const EMBED_CHARS = 1000; // độ dài text dùng để tạo vector
+
+// ─── Secrets (KHÔNG hardcode key trong source) ───────────────────────────
+let cachedApiKey: string | null = null;
+
+function loadSecrets(): { qdrant: { api_key?: string }; ollama?: { url?: string } } {
+	try {
+		if (existsSync(SECRETS_PATH)) {
+			return JSON.parse(readFileSync(SECRETS_PATH, "utf-8")) as {
+				qdrant: { api_key?: string };
+				ollama?: { url?: string };
+			};
+		}
+	} catch (error) {
+		console.error(
+			`[conversation-saver] Không đọc được secrets ${SECRETS_PATH}: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+	return { qdrant: {} };
+}
+
+function getApiKey(): string {
+	if (cachedApiKey) return cachedApiKey;
+	cachedApiKey =
+		process.env.QDRANT_API_KEY ||
+		loadSecrets().qdrant.api_key ||
+		"";
+	if (!cachedApiKey) {
+		console.error(
+			`[conversation-saver] ⚠️ Thiếu QDRANT_API_KEY — tạo ${SECRETS_PATH} hoặc set env QDRANT_API_KEY`,
+		);
+	}
+	return cachedApiKey;
+}
 
 // ─── In-memory buffer ────────────────────────────────────────────────────
 interface ConvEntry {
@@ -29,6 +70,8 @@ interface ConvEntry {
 
 const buffer: ConvEntry[] = [];
 let turnCount = 0;
+let sessionStartTime = 0;
+let currentSessionId = "";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -61,6 +104,15 @@ function buildSummary(entries: ConvEntry[]): string {
 	return `Pi session: ${entries.length} messages | ${topic}`;
 }
 
+/** ID deterministic dạng UUID v5-like — Qdrant chỉ chấp nhận integer hoặc UUID. */
+function sessionPointId(sessionId: string): string {
+	const hash = createHash("sha256").update(`conversation:${sessionId}`).digest();
+	hash[6] = (hash[6] & 0x0f) | 0x50; // version 5
+	hash[8] = (hash[8] & 0x3f) | 0x80; // variant RFC 4122
+	const hex = hash.subarray(0, 16).toString("hex");
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 // ─── Qdrant + Embedding ─────────────────────────────────────────────────
 
 async function generateEmbedding(text: string): Promise<number[]> {
@@ -69,6 +121,9 @@ async function generateEmbedding(text: string): Promise<number[]> {
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ model: EMBED_MODEL, prompt: text }),
 	});
+	if (!resp.ok) {
+		throw new Error(`Embedding HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
+	}
 	const data = (await resp.json()) as { embedding?: number[] };
 	if (!data.embedding || data.embedding.length !== 768) {
 		throw new Error(`Embedding failed: dims=${data.embedding?.length}`);
@@ -80,13 +135,16 @@ async function upsertToQdrant(
 	content: string,
 	summary: string,
 	messageCount: number,
+	sessionId: string,
+	startTs: number,
 ): Promise<void> {
-	const vector = await generateEmbedding(summary || content.substring(0, 500));
+	const embedText = content.substring(0, EMBED_CHARS) || summary;
+	const vector = await generateEmbedding(embedText);
 	const now = new Date();
 	const dateStr = now.toISOString().slice(0, 10);
 
 	const point = {
-		id: randomUUID(),
+		id: sessionPointId(sessionId),
 		vector,
 		payload: {
 			content,
@@ -100,7 +158,8 @@ async function upsertToQdrant(
 			status: "active",
 			version: 1,
 			channel: CHANNEL,
-			session_id: `pi_${dateStr}`,
+			session_id: sessionId,
+			session_start: startTs,
 			timestamp: now.getTime(),
 			change_reason: "Pi conversation auto-save via extension",
 			message_count: messageCount,
@@ -112,15 +171,18 @@ async function upsertToQdrant(
 		{
 			method: "PUT",
 			headers: {
-				"api-key": API_KEY,
+				"api-key": getApiKey(),
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ points: [point] }),
 		},
 	);
-	const result = (await resp.json()) as { status: string };
-	if (result.status !== "ok") {
-		console.error("[conversation-saver] Qdrant upsert failed:", result);
+	if (!resp.ok) {
+		throw new Error(`Qdrant upsert HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
+	}
+	const result = (await resp.json()) as { status?: string };
+	if (result.status !== "ok" && result.status !== "acknowledged") {
+		throw new Error(`Qdrant upsert failed: ${JSON.stringify(result)}`);
 	}
 }
 
@@ -139,19 +201,21 @@ function extractTextFromMessage(msg: any): string {
 
 // ─── Save current buffer ────────────────────────────────────────────────
 
-async function saveBuffer() {
-	if (buffer.length === 0) return;
+async function saveBuffer(): Promise<{ saved: number }> {
+	if (buffer.length === 0) return { saved: 0 };
 
 	const content = buildConversationText(buffer);
 	const summary = buildSummary(buffer);
 
 	try {
-		await upsertToQdrant(content, summary, buffer.length);
+		await upsertToQdrant(content, summary, buffer.length, currentSessionId, sessionStartTime);
 		console.log(
 			`[conversation-saver] ✅ Saved ${buffer.length} messages: ${summary.substring(0, 80)}`,
 		);
+		return { saved: buffer.length };
 	} catch (err) {
 		console.error("[conversation-saver] ❌ Save failed:", err);
+		return { saved: 0 };
 	}
 }
 
@@ -173,11 +237,14 @@ function dedupeBuffer() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function (pi: ExtensionAPI) {
-	// ── Session start: reset buffer ─────────────────────────────────────────
+	// ── Session start: reset buffer + tạo session id mới ─────────────────────
 	pi.on("session_start", async (_event: any) => {
 		buffer.length = 0;
 		turnCount = 0;
-		console.log("[conversation-saver] Session started, buffer reset");
+		sessionStartTime = Date.now();
+		const dateStr = new Date(sessionStartTime).toISOString().slice(0, 10);
+		currentSessionId = `pi_${dateStr}_${sessionStartTime}`;
+		console.log(`[conversation-saver] Session started: ${currentSessionId}, buffer reset`);
 	});
 
 	// ── Message end: capture user & assistant messages only (skip tool) ─────
@@ -201,11 +268,7 @@ export default function (pi: ExtensionAPI) {
 		turnCount++;
 		dedupeBuffer();
 
-		if (
-			SAVE_THRESHOLD > 0 &&
-			turnCount > 0 &&
-			turnCount % SAVE_THRESHOLD === 0
-		) {
+		if (SAVE_THRESHOLD > 0 && turnCount % SAVE_THRESHOLD === 0) {
 			await saveBuffer();
 		}
 	});
@@ -242,8 +305,6 @@ export default function (pi: ExtensionAPI) {
 			_signal: AbortSignal,
 			_onUpdate: ((update: any) => void) | undefined,
 		) {
-			const summary = buildSummary(buffer);
-
 			if (params.note) {
 				buffer.push({
 					role: "user",
@@ -251,17 +312,19 @@ export default function (pi: ExtensionAPI) {
 					ts: Date.now(),
 				});
 			}
+			dedupeBuffer();
 
-			await saveBuffer();
+			const summary = buildSummary(buffer);
+			const result = await saveBuffer();
 
 			return {
 				content: [
 					{
 						type: "text" as const,
-						text: `✅ Đã lưu conversation (${buffer.length} messages) vào Qdrant.\n\nSummary: ${summary}`,
+						text: `✅ Đã lưu conversation (${result.saved} messages) vào Qdrant.\n\nSummary: ${summary}`,
 					},
 				],
-				details: { saved: true, messageCount: buffer.length },
+				details: { saved: result.saved > 0, messageCount: result.saved },
 			};
 		},
 	});
