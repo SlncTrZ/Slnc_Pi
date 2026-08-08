@@ -873,7 +873,7 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
 		) {
 			waitingForSubmitPhrase = true;
 			lastVoiceDetail =
-				"done speaking? say 'send it', 'submit it', or an addressed command like 'Emi run that'";
+				"done speaking? say 'send it', 'xong rồi nhé', or an addressed command like 'Emi run that'";
 			renderVoiceWidget(ctx, lastVoiceDetail);
 		}
 	}
@@ -921,6 +921,18 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
 			/(?:^|[\s,.!?;:]+)(?:ok|okay)[\s,.!?;:]+send[\s,.!?;:]+it\s*[.!?]*$/i,
 			/(?:^|[\s,.!?;:]+)(?:send|submit)[\s,.!?;:]+it\s*[.!?]*$/i,
 			/(?:^|[\s,.!?;:]+)(?:(?:ok|okay|alright|all[\s,.!?;:]+right)[\s,.!?;:]+)?(?:that'?s|that[\s,.!?;:]+is)[\s,.!?;:]+it\s*[.!?]*$/i,
+			// Vietnamese: "anh nói xong rồi" / "nói xong rồi"
+			/(?:^|[\s,.!?;:]+)(?:anh[\s,.!?;:]+)?(?:nói|noi)[\s,.!?;:]+(?:xong)[\s,.!?;:]+(?:rồi|roi)\s*[.!?]*$/i,
+			// Vietnamese: "mei/mai/may/mây/mê xong rồi (nhé)"
+			/(?:^|[\s,.!?;:]+)(?:mei|mai|may|mây|mê)[\s,.!?;:]+(?:xong)[\s,.!?;:]+(?:rồi|roi)(?:[\s,.!?;:]+(?:nhé|nhe|nha))?\s*[.!?]*$/i,
+			// Vietnamese: "xong rồi nhé" (also "ok rồi nhé")
+			/(?:^|[\s,.!?;:]+)(?:xong|ok|okay)[\s,.!?;:]+(?:rồi|roi)[\s,.!?;:]+(?:nhé|nhe|nha)\s*[.!?]*$/i,
+			// Vietnamese: "đủ rồi nhé"
+			/(?:^|[\s,.!?;:]+)(?:đủ|du)[\s,.!?;:]+(?:rồi|roi)[\s,.!?;:]+(?:nhé|nhe|nha)\s*[.!?]*$/i,
+			// Vietnamese: "hết rồi nhé"
+			/(?:^|[\s,.!?;:]+)(?:hết|het)[\s,.!?;:]+(?:rồi|roi)[\s,.!?;:]+(?:nhé|nhe|nha)\s*[.!?]*$/i,
+			// Vietnamese: "gửi lệnh đi em" / "gửi lệnh đi"
+			/(?:^|[\s,.!?;:]+)(?:gửi|gui)[\s,.!?;:]+(?:lệnh|lenh)[\s,.!?;:]+(?:đi|di)(?:[\s,.!?;:]+(?:em|mình))?\s*[.!?]*$/i,
 		];
 		for (const pattern of submitPatterns) {
 			const match = pattern.exec(trimmed);

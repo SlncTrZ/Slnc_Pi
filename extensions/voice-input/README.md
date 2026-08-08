@@ -120,6 +120,18 @@ Emi go ahead
 Emmy run that
 Emi use that
 Emi send that
+
+Vietnamese send phrases are also supported (matched case-insensitively, with and
+without diacritics, e.g. ASR output `XONG ROI NHE`):
+
+anh nói xong rồi
+nói xong rồi
+mai xong rồi (also mei/may/mây/mê xong rồi)
+xong rồi nhé
+đủ rồi nhé
+hết rồi nhé
+gửi lệnh đi em
+gửi lệnh đi
 ```
 
 Short ambiguous commands such as `go ahead`, `run that`, `use that`, and `send that` require an addressed `Emi` / `Emmy` / `Emilia` prefix so normal dictated text does not accidentally submit.
