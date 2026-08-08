@@ -933,6 +933,8 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
 			/(?:^|[\s,.!?;:]+)(?:hết|het)[\s,.!?;:]+(?:rồi|roi)[\s,.!?;:]+(?:nhé|nhe|nha)\s*[.!?]*$/i,
 			// Vietnamese: "gửi lệnh đi em" / "gửi lệnh đi"
 			/(?:^|[\s,.!?;:]+)(?:gửi|gui)[\s,.!?;:]+(?:lệnh|lenh)[\s,.!?;:]+(?:đi|di)(?:[\s,.!?;:]+(?:em|mình))?\s*[.!?]*$/i,
+			// Vietnamese: "gửi đi em" / "gửi đi em con" (requires address to avoid false positives)
+			/(?:^|[\s,.!?;:]+)(?:gửi|gui)[\s,.!?;:]+(?:đi|di)[\s,.!?;:]+(?:em|mình|con)(?:[\s,.!?;:]+(?:em|mình|con))*\s*[.!?]*$/i,
 		];
 		for (const pattern of submitPatterns) {
 			const match = pattern.exec(trimmed);
