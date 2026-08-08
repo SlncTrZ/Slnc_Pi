@@ -103,64 +103,57 @@ def create_recognizer(model_dir: Path) -> OfflineRecognizer:
 
 
 async def download_model(model_dir: Path) -> None:
-    """Download model from Hugging Face if not already present."""
+    """Download the official k2-fsa Vietnamese zipformer model if not present.
+
+    Uses the k2-fsa sherpa-onnx release asset, which bundles a complete
+    tokens.txt (no sentencepiece generation step), so the recognizer
+    vocabulary is always valid.
+    """
     if (model_dir / "encoder.int8.onnx").exists():
         return
 
     log.info("=" * 60)
-    log.info("Downloading zipformer-vi-30M model (33MB)...")
+    log.info("Downloading zipformer-vi-30M-int8 model (~26MB)...")
     log.info("=" * 60)
 
     model_dir.mkdir(parents=True, exist_ok=True)
     import requests
 
-    # Hugging Face repo: hynt/Zipformer-30M-RNNT-6000h
-    base = "https://huggingface.co/hynt/Zipformer-30M-RNNT-6000h/resolve/main"
-    # Map source filenames (from HF) to expected names
-    files = [
-        ("encoder-epoch-20-avg-10.int8.onnx", "encoder.int8.onnx"),
-        ("decoder-epoch-20-avg-10.onnx", "decoder.onnx"),
-        ("joiner-epoch-20-avg-10.int8.onnx", "joiner.int8.onnx"),
-        ("bpe.model", "bpe.model"),
-    ]
+    url = (
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
+        "sherpa-onnx-zipformer-vi-30M-int8-2026-02-09.tar.bz2"
+    )
+    archive = model_dir / "model.tar.bz2"
+    log.info("  Downloading %s", url)
+    resp = requests.get(url, timeout=600)
+    resp.raise_for_status()
+    with open(archive, "wb") as f:
+        f.write(resp.content)
+    log.info("    Done (%.1f MB)", len(resp.content) / (1024 * 1024))
 
-    for src_name, dst_name in files:
-        url = f"{base}/{src_name}"
-        dest = model_dir / dst_name
-        if dest.exists():
-            log.info("  Already exists: %s", dst_name)
-            continue
-        log.info("  Downloading %s -> %s ...", src_name, dst_name)
-        resp = requests.get(url, timeout=180)
-        resp.raise_for_status()
-        with open(dest, "wb") as f:
-            f.write(resp.content)
-        mb = len(resp.content) / (1024 * 1024)
-        log.info("    Done (%.1f MB)", mb)
-
-    # Generate tokens.txt from BPE model if missing
-    tokens_path = model_dir / "tokens.txt"
-    if not tokens_path.exists():
-        bpe_path = model_dir / "bpe.model"
-        if bpe_path.exists():
-            log.info("  Generating tokens.txt from bpe.model...")
-            try:
-                import sentencepiece as spm
-                sp = spm.SentencePieceProcessor()
-                sp.load(str(bpe_path))
-                vocab_size = sp.get_piece_size()
-                with open(tokens_path, "w", encoding="utf-8") as f:
-                    for i in range(vocab_size):
-                        f.write(sp.id_to_piece(i) + "\n")
-                log.info("    Done (%d tokens)", vocab_size)
-            except ImportError:
-                log.warning("  sentencepiece not installed; tokens.txt must be provided manually")
-                # Create minimal tokens.txt
-                with open(tokens_path, "w", encoding="utf-8") as f:
-                    f.write("<blank>\n")
-                    f.write("<s>\n")
-                    f.write("</s>\n")
-                log.warning("  Created minimal tokens.txt - model may not work correctly")
+    # Extract only the model files we need, flattening the archive's top folder.
+    import tarfile
+    with tarfile.open(archive, "r:bz2") as tar:
+        wanted = {
+            "encoder.int8.onnx",
+            "decoder.onnx",
+            "joiner.int8.onnx",
+            "tokens.txt",
+            "bpe.model",
+        }
+        for member in tar.getmembers():
+            if not member.isfile():
+                continue
+            name = Path(member.name).name
+            if name not in wanted:
+                continue
+            src = tar.extractfile(member)
+            if src is None:
+                continue
+            with open(model_dir / name, "wb") as f:
+                f.write(src.read())
+            log.info("  Extracted %s", name)
+    archive.unlink(missing_ok=True)
 
     log.info("Model download complete!")
     log.info("Model directory: %s", model_dir)
