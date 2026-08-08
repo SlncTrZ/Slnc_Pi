@@ -1,5 +1,5 @@
 {
-  "mode": "beep",
+  "mode": "tts",
   "ttsEngine": "omnivoice",
   "fish": {
     "referenceId": "6d370109274d4c29ab83ad6b6af77978",
