@@ -134,6 +134,8 @@ gửi lệnh đi em
 gửi lệnh đi
 gửi đi em
 gửi đi em con
+nạp câu lệnh
+nạp câu lệnh đi em
 ```
 
 Short ambiguous commands such as `go ahead`, `run that`, `use that`, and `send that` require an addressed `Emi` / `Emmy` / `Emilia` prefix so normal dictated text does not accidentally submit.
