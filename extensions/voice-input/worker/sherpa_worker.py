@@ -105,6 +105,7 @@ recognizer: OfflineRecognizer | None = None
 
 # --- Model -----------------------------------------------------------------
 
+
 def _find_model_file(model_dir: Path, prefix: str, exts: tuple[str, ...]) -> str:
     """Tim file model theo prefix + duoi onnx (ho tro ten file linh hoat)."""
     for ext in exts:
@@ -205,7 +206,9 @@ def _extract_k2fsa_30m(model_dir: Path) -> None:
                 with open(model_dir / name, "wb") as f:
                     f.write(src.read())
             except OSError as exc:
-                raise RuntimeError(f"Failed to write {model_dir / name}: {exc}") from exc
+                raise RuntimeError(
+                    f"Failed to write {model_dir / name}: {exc}"
+                ) from exc
             log.info("  Extracted %s", name)
     archive.unlink(missing_ok=True)
 
@@ -256,6 +259,7 @@ async def download_model(model_dir: Path) -> None:
 
 # --- Lifespan & HTTP Endpoints -------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global recognizer
@@ -264,7 +268,9 @@ async def lifespan(app: FastAPI):
     yield
     recognizer = None
 
+
 app = FastAPI(title="Sherpa-ONNX ASR Worker", version="2.0.0", lifespan=lifespan)
+
 
 @app.get("/health")
 async def health():
@@ -277,7 +283,9 @@ async def health():
         "port": PORT,
     }
 
+
 # --- WebSocket -----------------------------------------------------------
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
@@ -331,7 +339,9 @@ async def websocket_endpoint(ws: WebSocket):
     finally:
         audio_buffer.clear()
 
+
 # --- Transcription -------------------------------------------------------
+
 
 def transcribe(pcm_data: bytes) -> str:
     """Transcribe PCM16 S16LE 16kHz mono audio using sherpa-onnx."""
@@ -352,6 +362,7 @@ def transcribe(pcm_data: bytes) -> str:
     stream.accept_waveform(16000, samples)
     recognizer.decode_streams([stream])
     return stream.result.text.strip()
+
 
 # --- Entry point ---------------------------------------------------------
 
