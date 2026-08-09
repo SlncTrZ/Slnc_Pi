@@ -937,6 +937,10 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
 			/(?:^|[\s,.!?;:]+)(?:gửi|gui)[\s,.!?;:]+(?:đi|di)[\s,.!?;:]+(?:em|mình|con)(?:[\s,.!?;:]+(?:em|mình|con))*\s*[.!?]*$/i,
 			// Vietnamese: "nạp câu lệnh" / "nạp câu lệnh đi em"
 			/(?:^|[\s,.!?;:]+)(?:nạp|nap)[\s,.!?;:]+(?:câu|cau)[\s,.!?;:]+(?:lệnh|lenh)(?:[\s,.!?;:]+(?:đi|di)(?:[\s,.!?;:]+(?:em|mình|con)(?:[\s,.!?;:]+(?:em|mình|con))*)?)?\s*[.!?]*$/i,
+			// Vietnamese: "ok xong (rồi)" / "ok xong nhé"
+			/(?:^|[\s,.!?;:]+)(?:ok|okay)[\s,.!?;:]+(?:xong)(?:[\s,.!?;:]+(?:rồi|roi))?(?:[\s,.!?;:]+(?:nhé|nhe|nha))?\s*[.!?]*$/i,
+			// Vietnamese: "ok gửi (đi)" / "ok gửi đi em" / "ok gửi nhé"
+			/(?:^|[\s,.!?;:]+)(?:ok|okay)[\s,.!?;:]+(?:gửi|gui)(?:[\s,.!?;:]+(?:đi|di)(?:[\s,.!?;:]+(?:em|mình|con))?)?(?:[\s,.!?;:]+(?:nhé|nhe|nha))?\s*[.!?]*$/i,
 		];
 		for (const pattern of submitPatterns) {
 			const match = pattern.exec(trimmed);
