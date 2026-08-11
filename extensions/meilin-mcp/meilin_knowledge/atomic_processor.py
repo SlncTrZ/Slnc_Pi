@@ -1,7 +1,11 @@
 """Atomic Knowledge Processor — Qdrant Upsert + Semantic Search with Versioning.
 Handles knowledge evolution: soft delete old versions, create new ones.
 
-Wing: code_chronicles | Topic: knowledge_package | Updated: 2026-07-24
+Cyber Brain (2 collection duy nhất):
+  - cyberbrain_knowledge: {content, domain, project, source, ...meta}
+  - cyberbrain_episodic: {content, agent_name, project, session_id, timestamp, ...meta}
+
+Wing: code_chronicles | Topic: knowledge_package | Updated: 2026-08-11
 """
 
 import hashlib
@@ -18,11 +22,16 @@ from .config import (
     DEFAULT_SCORE_THRESHOLD,
     DEFAULT_SEARCH_LIMIT,
     EMBED_DIM,
+    EPISODIC_COLLECTION,
+    KNOWLEDGE_COLLECTION,
     LOW_POINTS_THRESHOLD,
     OLLAMA_MODEL,
     OLLAMA_URL,
     QDRANT_API_KEY,
     QDRANT_URL,
+    WING_TO_DOMAIN,
+    resolve_collection,
+    resolve_domain,
 )
 
 log = logging.getLogger("meilin-knowledge")
@@ -63,7 +72,8 @@ def _generate_embedding(text: str) -> list[float]:
 
 
 def _collection_name(wing: str) -> str:
-    return f"meilin_{wing}"
+    """Ánh xạ wing → collection Cyber Brain (knowledge hoặc episodic)."""
+    return resolve_collection(wing)
 
 
 def _search_collection(
@@ -89,7 +99,8 @@ def _search_collection(
         results = data.get("result", []) if data.get("status") == "ok" else []
         return [
             {
-                "wing": r["payload"].get("wing", collection.replace("meilin_", "")),
+                "wing": r["payload"].get("wing", r["payload"].get("domain", "")),
+                "domain": r["payload"].get("domain", ""),
                 "topic": r["payload"].get("topic", ""),
                 "content": r["payload"].get("content", ""),
                 "summary": r["payload"].get("summary", ""),
@@ -215,10 +226,16 @@ class AtomicKnowledgeProcessor:
         # 3. Generate embedding
         vector = _generate_embedding(content)
 
-        # 4. Build payload
+        # 4. Build payload (schema Cyber Brain: content, domain, project, source + meta)
         ts = datetime.now(timezone.utc).isoformat()
-        payload = {
+        domain = resolve_domain(wing)
+        is_episodic = resolve_collection(wing) == EPISODIC_COLLECTION
+        payload: dict[str, Any] = {
             "content": content,
+            "domain": domain,
+            "project": project or "",
+            "source": (extra_metadata.pop("source_file", "") if extra_metadata else ""),
+            # meta (giữ versioning & filter)
             "wing": wing,
             "topic": topic,
             "entity_name": entity_name or f"atom_{uuid.uuid4().hex[:8]}",
@@ -229,8 +246,10 @@ class AtomicKnowledgeProcessor:
             "summary": (summary or content[:200]),
             "change_reason": change_reason,
             "importance": importance,
-            "source_file": extra_metadata.pop("source_file", "") if extra_metadata else "",
         }
+        if is_episodic:
+            payload["agent_name"] = (extra_metadata.pop("agent_name", "pi") if extra_metadata else "pi")
+            payload["session_id"] = (extra_metadata.pop("session_id", "") if extra_metadata else "")
         if extra_metadata:
             payload["extra_metadata"] = extra_metadata
 
@@ -263,35 +282,41 @@ class AtomicKnowledgeProcessor:
         topic: str | None = None,
         limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[dict]:
-        """Semantic search across all (or filtered) wings."""
+        """Semantic search across Cyber Brain collections.
+
+        wing có thể là wing cũ (tcdserver...) hoặc domain (code|ops|hardware|research)
+        hoặc 'conversation' (cyberbrain_episodic). Không truyền wing → tìm cả 2 collections.
+        """
         vector = _generate_embedding(query)
 
         if wing:
-            # Single-wing search
+            # Single collection search (episodic hoặc knowledge)
             collection = _collection_name(wing)
-            filter_dict = None
+            conditions = []
+            if collection == KNOWLEDGE_COLLECTION:
+                conditions.append({"key": "domain", "match": {"value": resolve_domain(wing)}})
             if topic:
-                filter_dict = {"must": [{"key": "topic", "match": {"value": topic}}]}
+                conditions.append({"key": "topic", "match": {"value": topic}})
+            filter_dict = {"must": conditions} if conditions else None
             results = _search_collection(collection, vector, filter_dict=filter_dict, limit=limit)
             # Filter active only
             results = [r for r in results if r.get("status") == "active"]
             return results[:limit]
 
-        # Search all wings
+        # Search all collections
         all_results = []
         needs_low_threshold = any(_count_points(c) < LOW_POINTS_THRESHOLD for c in ALL_COLLECTIONS)
 
-        for w in [c.replace("meilin_", "") for c in ALL_COLLECTIONS]:
-            collection = _collection_name(w)
+        for collection in ALL_COLLECTIONS:
             filter_dict = {"must": [{"key": "status", "match": {"value": "active"}}]}
             if topic:
                 filter_dict["must"].append({"key": "topic", "match": {"value": topic}})
 
-            wing_results = _search_collection(collection, vector, filter_dict=filter_dict, limit=limit)
+            col_results = _search_collection(collection, vector, filter_dict=filter_dict, limit=limit)
             # Apply score threshold unless collection is small
             if not needs_low_threshold:
-                wing_results = [r for r in wing_results if r.get("score", 0) >= DEFAULT_SCORE_THRESHOLD]
-            all_results.extend(wing_results)
+                col_results = [r for r in col_results if r.get("score", 0) >= DEFAULT_SCORE_THRESHOLD]
+            all_results.extend(col_results)
 
         # Sort by score descending
         all_results.sort(key=lambda r: r.get("score", 0), reverse=True)

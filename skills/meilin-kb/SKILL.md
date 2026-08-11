@@ -1,14 +1,14 @@
 ---
 name: meilin-kb
 description: >
-  Giao tiếp với MeiLin Knowledge Base 6-Wing Palace trên Qdrant.
-  Dùng để lưu trữ (knowledge_store), tra cứu (knowledge_search),
-  conversation memory, và Post-Action logging. BẮT BUỘC khi làm
-  việc với knowledge base, server .227, hoặc cần memory recall.
+  Giao tiếp với MeiLin Cyber Brain trên Qdrant (2 collection duy nhất:
+  cyberbrain_knowledge + cyberbrain_episodic). Dùng để lưu trữ (knowledge_store),
+  tra cứu (knowledge_search), conversation memory, và Post-Action logging.
+  BẮT BUỘC khi làm việc với knowledge base, server .227, hoặc cần memory recall.
 allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 ---
 
-# MeiLin Knowledge Base — Qdrant REST API + Ollama Embedding
+# MeiLin Cyber Brain — Qdrant REST API + Ollama Embedding
 
 > ⚠️ **Luật vàng:** Không gửi payload trần thiếu vector. Embedding trước, upsert sau.
 
@@ -37,16 +37,27 @@ allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 > if (!API_KEY) throw new Error('Thiếu QDRANT_API_KEY — tạo ~/.pi/agent/secrets/qdrant.json');
 > ```
 
-### 6-Wing Collections (all 768d, Cosine distance)
+### Cyber Brain Collections (2 collection duy nhất — chốt 2026-08-11, 768d Cosine)
 
-| Wing | Collection | Mục đích |
-| ------ | ------------ | ---------- |
-| `tcdserver` | `meilin_tcdserver` | Server infrastructure, docker, deployment |
-| `openclaw` | `meilin_openclaw` | AI agents, skills, LLM, MeiLin project |
-| `robotics` | `meilin_robotics` | Hardware, STM32, Raspberry Pi, sensors |
-| `code_chronicles` | `meilin_code_chronicles` | Code evolution, MCP, API, technical notes |
-| `omniscience_wiki` | `meilin_omniscience_wiki` | Research, theory, concepts, tutorials |
-| `conversation` | `meilin_conversation` | Chat history, conversation memory |
+| Collection | Payload schema | Mục đích |
+| ------------ | -------------- | ---------- |
+| `cyberbrain_knowledge` | `{content, domain, project, source}` | Tri thức — mọi thứ trừ hội thoại |
+| `cyberbrain_episodic` | `{content, agent_name, project, session_id, timestamp}` | Hội thoại / ký ức phiên |
+
+**Domain hợp lệ (field `domain` trong knowledge):** `code` | `ops` | `hardware` | `research`
+
+**Ánh xạ wing cũ (6-wing) → domain mới:**
+
+| Wing cũ | Domain mới | Ghi chú |
+| -------- | ---------- | ------- |
+| `code_chronicles` | `code` | Code evolution, MCP, API, technical notes |
+| `tcdserver` | `ops` | Server infrastructure, docker, deployment |
+| `openclaw` | `ops` | AI agents, skills, LLM, MeiLin project |
+| `robotics` | `hardware` | Hardware, STM32, Raspberry Pi, sensors |
+| `omniscience_wiki` | `research` | Research, theory, concepts, tutorials |
+| `conversation` | → `cyberbrain_episodic` | Chat history, conversation memory |
+
+> **Ghi chú:** `wing` cũ vẫn chấp nhận được trong API (tương thích ngược) — tự ánh xạ sang domain/collection. Không có collection `meilin_*` nào nữa.
 
 ---
 
@@ -76,23 +87,27 @@ async function generateEmbedding(text) {
 
 ## 3. Knowledge Store Protocol
 
-### 3.1 Upsert knowledge
+### 3.1 Upsert knowledge → cyberbrain_knowledge
 
 ```javascript
-// === function: knowledgeStore({ content, wing, topic, entity_name, entity_type, importance, change_reason }) ===
-async function knowledgeStore({ content, wing, topic, entity_name, entity_type, importance, change_reason }) {
+// === function: knowledgeStore({ content, domain, project, source, topic, entity_name, entity_type, importance, change_reason }) ===
+// domain: code|ops|hardware|research (hoặc wing cũ để tự ánh xạ)
+async function knowledgeStore({ content, domain, project, source, topic, entity_name, entity_type, importance, change_reason }) {
   // Step 1: Embedding
   const vector = await generateEmbedding(content);
-  
-  // Step 2: Build payload
+
+  // Step 2: Build payload (schema Cyber Brain knowledge)
   const { randomUUID } = require('node:crypto');
   const point = {
     id: randomUUID(),
     vector,
     payload: {
       content,
-      wing,
-      topic,
+      domain: domain || 'ops',
+      project: project || '',
+      source: source || '',
+      // meta (giữ versioning & filter)
+      topic: topic || 'general',
       entity_name: entity_name || '',
       entity_type: entity_type || 'concept',
       version: 1,
@@ -103,9 +118,9 @@ async function knowledgeStore({ content, wing, topic, entity_name, entity_type, 
       importance: importance || 'medium'
     }
   };
-  
+
   // Step 3: Upsert to Qdrant
-  const resp = await fetch(`http://192.168.1.227:6333/collections/meilin_${wing}/points`, {
+  const resp = await fetch('http://192.168.1.227:6333/collections/cyberbrain_knowledge/points', {
     method: 'PUT',
     headers: {
       'api-key': 'API_KEY',
@@ -114,32 +129,59 @@ async function knowledgeStore({ content, wing, topic, entity_name, entity_type, 
     body: JSON.stringify({ points: [point] })
   });
   const result = await resp.json();
-  
+
   // Step 4: Verify
   if (result.status === 'ok') {
-    return { success: true, wing, operation_id: result.result?.operation_id };
+    return { success: true, domain, operation_id: result.result?.operation_id };
   }
   return { success: false, error: result.status?.error || 'Unknown error' };
 }
 ```
 
-### 3.2 Payload Schema
+### 3.2 Lưu hội thoại → cyberbrain_episodic
+
+```javascript
+async function episodicStore({ content, agent_name, project, session_id }) {
+  const vector = await generateEmbedding(content);
+  const { randomUUID } = require('node:crypto');
+  const point = {
+    id: randomUUID(),
+    vector,
+    payload: {
+      content,
+      agent_name: agent_name || 'pi',
+      project: project || '',
+      session_id: session_id || '',
+      timestamp: new Date().toISOString(),
+      status: 'active'
+    }
+  };
+  const resp = await fetch('http://192.168.1.227:6333/collections/cyberbrain_episodic/points', {
+    method: 'PUT',
+    headers: { 'api-key': 'API_KEY', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ points: [point] })
+  });
+  return (await resp.json()).status === 'ok';
+}
+```
+
+### 3.3 Payload Schema (knowledge)
 
 ```json
 {
   "content": "string (nội dung chính)",
-  "wing": "tcdserver|openclaw|robotics|code_chronicles|omniscience_wiki|conversation",
+  "domain": "code|ops|hardware|research",
+  "project": "string (tên dự án, optional)",
+  "source": "string (file/nguồn gốc, optional)",
   "topic": "string (chủ đề, ví dụ: docker_config, code_evolution, skill)",
   "entity_name": "string (tên entity, optional)",
   "entity_type": "function|class|concept|skill|config|document_chunk|message|technical_note",
   "version": "number (bắt đầu từ 1)",
   "status": "active|deprecated",
-  "timestamp": "ISO 8601 (2026-06-15T14:00:00.000Z)",
+  "timestamp": "ISO 8601 (2026-08-11T14:00:00.000Z)",
   "summary": "string (max 200 ký tự)",
   "change_reason": "string (lý do thay đổi)",
-  "importance": "high|medium|low",
-  "source_file": "string (path file gốc, optional)",
-  "extra_metadata": "object (metadata bổ sung, optional)"
+  "importance": "high|medium|low"
 }
 ```
 
@@ -150,18 +192,19 @@ async function knowledgeStore({ content, wing, topic, entity_name, entity_type, 
 ### 4.1 Semantic search
 
 ```javascript
-// === function: knowledgeSearch({ query, wing, topic, limit, threshold }) ===
-async function knowledgeSearch({ query, wing, topic, limit, threshold }) {
+// === function: knowledgeSearch({ query, domain, topic, limit, threshold }) ===
+// domain: code|ops|hardware|research (hoặc wing cũ) — optional, bỏ qua để tìm cả knowledge
+async function knowledgeSearch({ query, domain, topic, limit, threshold }) {
   // Step 1: Embedding
   const vector = await generateEmbedding(query);
-  
+
   // Step 2: Build filter
   const filter = { must: [] };
-  if (wing) filter.must.push({ key: 'wing', match: { value: wing } });
+  if (domain) filter.must.push({ key: 'domain', match: { value: domain } });
   if (topic) filter.must.push({ key: 'topic', match: { value: topic } });
-  
-  // Step 3: Search
-  const resp = await fetch(`http://192.168.1.227:6333/collections/${wing ? 'meilin_' + wing : 'meilin_code_chronicles'}/points/search`, {
+
+  // Step 3: Search cyberbrain_knowledge
+  const resp = await fetch('http://192.168.1.227:6333/collections/cyberbrain_knowledge/points/search', {
     method: 'POST',
     headers: {
       'api-key': 'API_KEY',
@@ -176,11 +219,11 @@ async function knowledgeSearch({ query, wing, topic, limit, threshold }) {
     })
   });
   const data = await resp.json();
-  
+
   // Step 4: Return results
   return (data.result || []).map(r => ({
     score: r.score,
-    wing: r.payload.wing,
+    domain: r.payload.domain,
     topic: r.payload.topic,
     content: r.payload.content,
     summary: r.payload.summary,
@@ -194,19 +237,44 @@ async function knowledgeSearch({ query, wing, topic, limit, threshold }) {
 
 **Threshold note:** Nếu `points_count < 100` → hạ `score_threshold` xuống `1` (không lọc).
 
-### 4.2 Query tất cả wings (ai_memory_read)
+### 4.2 Tra cứu hội thoại (ai_memory_read / conversation recall)
 
 ```javascript
-// Tìm kiếm tất cả wings + conversation
+async function episodicSearch({ query, agent_name, limit, threshold }) {
+  const vector = await generateEmbedding(query);
+  const filter = { must: [] };
+  if (agent_name) filter.must.push({ key: 'agent_name', match: { value: agent_name } });
+
+  const resp = await fetch('http://192.168.1.227:6333/collections/cyberbrain_episodic/points/search', {
+    method: 'POST',
+    headers: { 'api-key': 'API_KEY', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      vector,
+      limit: limit || 5,
+      with_payload: true,
+      score_threshold: threshold ?? 0.6,
+      filter: filter.must.length > 0 ? filter : undefined
+    })
+  });
+  const data = await resp.json();
+  return (data.result || []).map(r => ({
+    score: r.score,
+    agent_name: r.payload.agent_name,
+    session_id: r.payload.session_id,
+    content: r.payload.content,
+    timestamp: r.payload.timestamp
+  }));
+}
+```
+
+### 4.3 Query toàn bộ (knowledge + episodic)
+
+```javascript
 async function aiMemoryRead(query) {
   const results = [];
-  const wings = ['tcdserver','openclaw','robotics','code_chronicles','omniscience_wiki','conversation'];
-  const vector = await generateEmbedding(query);
-  
-  for (const wing of wings) {
-    const resp = await fetch(`http://192.168.1.227:6333/collections/meilin_${wing}/points/search`, ...);
-    results.push(...(data.result || []));
-  }
+  const k = await knowledgeSearch({ query });
+  const e = await episodicSearch({ query });
+  results.push(...k, ...e);
   return results.sort((a, b) => b.score - a.score).slice(0, 5);
 }
 ```
@@ -225,7 +293,9 @@ await knowledgeStore({
 Diff/Summary: ${briefWhatChanged}
 Reason: ${whyItChanged}
 Project: ${projectName}`,
-  wing: 'code_chronicles',
+  domain: 'code',           // hoặc 'ops' nếu là deploy/server
+  project: projectName,
+  source: filePath,
   topic: 'code_evolution',
   entity_name: `pi-action-${Date.now()}`,
   entity_type: 'technical_note',
@@ -233,7 +303,7 @@ Project: ${projectName}`,
 });
 ```
 
-**Khi deploy server .227:** lưu vào wing `tcdserver`, topic `docker_config`.
+**Khi deploy server .227:** lưu vào `domain: 'ops'`, `topic: 'docker_config'`.
 
 ---
 
@@ -246,7 +316,7 @@ Truy vấn server info:
 ```javascript
 const serverInfo = await knowledgeSearch({
   query: 'server infrastructure overview',
-  wing: 'tcdserver',
+  domain: 'ops',
   limit: 5,
   threshold: 0.5
 });
@@ -263,24 +333,15 @@ Quick reference từ kết quả:
 
 ## 7. Conversation Memory Protocol
 
-### 7.1 Lưu hội thoại
+### 7.1 Lưu hội thoại → cyberbrain_episodic
 
 ```javascript
-async function conversationSave({ content, channel, session_id, role, importance }) {
-  return await knowledgeStore({
+async function conversationSave({ content, agent_name, project, session_id, importance }) {
+  return await episodicStore({
     content,
-    wing: 'conversation',
-    topic: 'chat_history',
-    entity_name: session_id || `conv_${Date.now()}`,
-    entity_type: 'message',
-    importance: importance || 'medium',
-    change_reason: 'Conversation memory save',
-    extra_metadata: {
-      channel: channel || 'pi',
-      role: role || 'user',
-      session_id: session_id || '',
-      timestamp: Date.now()
-    }
+    agent_name: agent_name || 'pi',
+    project: project || '',
+    session_id: session_id || `conv_${Date.now()}`,
   });
 }
 ```
@@ -288,37 +349,35 @@ async function conversationSave({ content, channel, session_id, role, importance
 ### 7.2 Tra cứu hội thoại
 
 ```javascript
-async function conversationRecall({ query, channel, limit }) {
-  const results = await knowledgeSearch({
+async function conversationRecall({ query, agent_name, limit }) {
+  return await episodicSearch({
     query,
-    wing: 'conversation',
-    topic: 'chat_history',
+    agent_name,
     limit: limit || 5,
     threshold: 0.6
   });
-  return results;
 }
 ```
 
-### 7.3 Đề xuất: Auto-save conversation cho Pi
+### 7.3 Auto-save conversation cho Pi
 
 **Cơ chế:** Cuối mỗi session (hoặc mỗi N tin nhắn), tự động:
 
 1. Tóm tắt conversation thành 1-3 câu
-2. Lưu vào wing `conversation` với channel `pi`
+2. Lưu vào `cyberbrain_episodic` với `agent_name: 'pi'`
 3. (Optional) Export ra file `.md` trong thư mục chỉ định
 
-    ---
+---
 
-## 8. Web Research → Wiki Wing Protocol (BẮT BUỘC khi search web)
+## 8. Web Research → Cyber Brain Protocol (BẮT BUỘC khi search web)
 
-> **Rule từ Anh (2026-08-07):** Mỗi khi Anh yêu cầu search/nghiên cứu thông tin — PHẢI check wiki trước, trả lời trực tiếp nếu có; chỉ web search khi wiki không đủ. Sau khi tổng hợp xong — PHẢI lưu vào wiki wing.
+> **Rule từ Anh (2026-08-07):** Mỗi khi Anh yêu cầu search/nghiên cứu thông tin — PHẢI check wiki trước (domain `research`), trả lời trực tiếp nếu có; chỉ web search khi wiki không đủ. Sau khi tổng hợp xong — PHẢI lưu vào `cyberbrain_knowledge` (domain `research`).
 
 ### 8.1 Flow chuẩn
 
 ```text
 Anh: "Nghiên cứu về model A"
-  ┌─> B1: knowledgeSearch({ query: 'model A', wing: 'omniscience_wiki', threshold: 0.7 })
+  ┌─> B1: knowledgeSearch({ query: 'model A', domain: 'research', threshold: 0.7 })
   │       ├─> Có kết quả score ≥ 0.7 → trả lời trực tiếp từ wiki (kèm nguồn), KHÔNG web search
   │       └─> Không có (hoặc cần cập nhật mới) → B2
   └─> B2: web_search(query) → tổng hợp answer
@@ -329,7 +388,7 @@ Anh: "Nghiên cứu về model A"
 
 ### 8.2 Ghi chú
 
-- Extension `web-wiki-saver` tự bắt kết quả `web_search`/`source_check` → lưu vào `meilin_omniscience_wiki` (wing `omniscience_wiki`, entity_type `web_research`).
+- Extension `web-wiki-saver` tự bắt kết quả `web_search`/`source_check` → lưu vào `cyberbrain_knowledge` (domain `research`, entity_type `web_research`).
 - Lần sau search cùng chủ đề → wiki trả kết quả → trả lời trực tiếp, tiết kiệm web search.
 - Nếu kết quả web rất mới (đòi hỏi recency) → ưu tiên web search, rồi vẫn lưu wiki để làm mới.
 
@@ -351,7 +410,7 @@ async function main() {
   })).json();
   console.log('Embedding dims:', e.embedding.length);
 
-  const s = await (await fetch('http://192.168.1.227:6333/collections/meilin_tcdserver/points/search', {
+  const s = await (await fetch('http://192.168.1.227:6333/collections/cyberbrain_knowledge/points/search', {
     method: 'POST',
     headers: {'api-key':API_KEY,'Content-Type':'application/json'},
     body: JSON.stringify({vector:e.embedding, limit:3, with_payload:true, score_threshold:0.5})

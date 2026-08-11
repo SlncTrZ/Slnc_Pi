@@ -1,7 +1,15 @@
 """MeiLin Knowledge Base — Configuration.
 Qdrant REST API + Ollama Embedding connection settings.
 
-Wing: code_chronicles | Topic: knowledge_package | Updated: 2026-07-24
+Cyber Brain: 2 collection duy nhất (chốt 2026-08-11):
+  - cyberbrain_knowledge: {content, domain, project, source}
+  - cyberbrain_episodic: {content, agent_name, project, session_id, timestamp}
+
+Wing cũ (6-wing) → domain mới (Cyber Brain schema):
+  code_chronicles → code | openclaw/tcdserver → ops | robotics → hardware | omniscience_wiki → research
+  conversation → cyberbrain_episodic
+
+Wing: code_chronicles | Topic: knowledge_package | Updated: 2026-08-11
 """
 
 import json
@@ -42,15 +50,42 @@ OLLAMA_URL_LOCAL = os.environ.get("OLLAMA_URL_LOCAL", "http://192.168.1.171:1143
 OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 EMBED_DIM = 768
 
-# ─── 6-Wing Collections ──────────────────────────────────────────────────────
-ALL_COLLECTIONS = [
-    "meilin_tcdserver",
-    "meilin_openclaw",
-    "meilin_robotics",
-    "meilin_code_chronicles",
-    "meilin_omniscience_wiki",
-    "meilin_conversation",
-]
+# ─── Cyber Brain Collections (2 collection duy nhất) ────────────────
+KNOWLEDGE_COLLECTION = "cyberbrain_knowledge"
+EPISODIC_COLLECTION = "cyberbrain_episodic"
+ALL_COLLECTIONS = [KNOWLEDGE_COLLECTION, EPISODIC_COLLECTION]
+
+# Wing cũ → domain mới (payload schema Cyber Brain)
+WING_TO_DOMAIN = {
+    "code_chronicles": "code",
+    "openclaw": "ops",
+    "tcdserver": "ops",
+    "robotics": "hardware",
+    "omniscience_wiki": "research",
+}
+
+# Domain hợp lệ (payload field `domain`)
+VALID_DOMAINS = {"code", "ops", "hardware", "research"}
+
+
+def resolve_collection(wing_or_domain: str) -> str:
+    """Ánh xạ wing/domain → collection Cyber Brain.
+
+    - wing cũ 'conversation' hoặc domain bất kỳ → cyberbrain_knowledge?
+    Không: 'conversation' (hội thoại) → cyberbrain_episodic; mọi tri thức → cyberbrain_knowledge.
+    """
+    if wing_or_domain in ("conversation", EPISODIC_COLLECTION):
+        return EPISODIC_COLLECTION
+    return KNOWLEDGE_COLLECTION
+
+
+def resolve_domain(wing_or_domain: str) -> str:
+    """Chuẩn hoá wing cũ hoặc domain mới về domain payload."""
+    if wing_or_domain in WING_TO_DOMAIN:
+        return WING_TO_DOMAIN[wing_or_domain]
+    if wing_or_domain in VALID_DOMAINS:
+        return wing_or_domain
+    return "ops"  # default
 
 # ─── Scoring ──────────────────────────────────────────────────────────────────
 DEFAULT_SEARCH_LIMIT = 5

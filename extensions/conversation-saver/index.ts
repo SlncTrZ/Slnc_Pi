@@ -1,13 +1,14 @@
 /**
- * conversation-saver — Auto-save Pi conversation to Qdrant MeiLin Knowledge Base.
+ * conversation-saver — Auto-save Pi conversation to Qdrant Cyber Brain.
  *
  * Cơ chế:
  *   - Mỗi turn_end: ghi user + assistant messages vào buffer (bỏ tool calls)
  *   - Auto-save mỗi SAVE_THRESHOLD turn + session_shutdown + manual "lưu lại"
  *   - Mỗi session = 1 point (ID deterministic từ session_id) → upsert đè,
  *     KHÔNG trùng lặp dữ liệu như version cũ (1031 points → ~1/session)
+ *     Collection: cyberbrain_episodic {content, agent_name, project, session_id, timestamp}
  *
- * Wing: conversation | Topic: chat_history | Updated: 2026-08-07 09:20
+ * Wing: episodic | Topic: chat_history | Updated: 2026-08-11
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -29,6 +30,7 @@ const QDRANT_URL = process.env.QDRANT_URL || "http://192.168.1.227:6333";
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.227:11434";
 const EMBED_MODEL = "nomic-embed-text";
 const CHANNEL = "pi";
+const COLLECTION = "cyberbrain_episodic";
 const SAVE_THRESHOLD = 10; // auto-save mỗi 10 turn + shutdown + manual
 const EMBED_CHARS = 1000; // độ dài text dùng để tạo vector
 
@@ -159,6 +161,11 @@ async function upsertToQdrant(
 		vector,
 		payload: {
 			content,
+			agent_name: "pi",
+			project: "Slnc_Pi",
+			session_id: sessionId,
+			timestamp: now.getTime(),
+			// meta
 			wing: "conversation",
 			topic: "chat_history",
 			date: dateStr,
@@ -169,16 +176,14 @@ async function upsertToQdrant(
 			status: "active",
 			version: 1,
 			channel: CHANNEL,
-			session_id: sessionId,
 			session_start: startTs,
-			timestamp: now.getTime(),
 			change_reason: "Pi conversation auto-save via extension",
 			message_count: messageCount,
 		},
 	};
 
 	const resp = await fetch(
-		`${QDRANT_URL}/collections/meilin_conversation/points`,
+		`${QDRANT_URL}/collections/${COLLECTION}/points`,
 		{
 			method: "PUT",
 			headers: {

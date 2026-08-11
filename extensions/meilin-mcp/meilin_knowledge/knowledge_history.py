@@ -1,14 +1,14 @@
 """Knowledge History Viewer — Timeline + Version History for Knowledge Evolution.
 Tra ve lich su cac version cua mot entity trong Qdrant.
 
-Wing: code_chronicles | Topic: knowledge_package | Updated: 2026-07-24
+Wing: code_chronicles | Topic: knowledge_package | Updated: 2026-08-11
 """
 
 import logging
 
 import httpx
 
-from .config import QDRANT_API_KEY, QDRANT_URL
+from .config import QDRANT_API_KEY, QDRANT_URL, resolve_collection
 
 log = logging.getLogger("meilin-knowledge")
 QDRANT_HEADERS = {
@@ -40,7 +40,7 @@ class KnowledgeHistoryViewer:
         if not wing:
             return []
 
-        collection = f"meilin_{wing}"
+        collection = resolve_collection(wing)
         url = f"{QDRANT_URL}/collections/{collection}/points/scroll"
 
         # Build filter

@@ -17,8 +17,8 @@ User: Trương Công Định (SlncTrZ)
 
 **Khi làm việc liên quan server .227, docker, deployment → PHẢI load skill `/skill:meilin-kb` rồi đọc Qdrant trước:**
 
-- Collection: `meilin_tcdserver`
-- Dùng `knowledgeSearch` query `"server infrastructure overview"` wing `tcdserver`
+- Collection: `cyberbrain_knowledge` (domain `ops`) — 2 collection duy nhất: `cyberbrain_knowledge` + `cyberbrain_episodic`
+- Dùng `knowledgeSearch` query `"server infrastructure overview"` domain `ops`
 - Chứa: hardware specs, container list, ports, networks, .171 info
 
 **Quick Reference:**
@@ -29,8 +29,8 @@ User: Trương Công Định (SlncTrZ)
 
 ## 3. POST-ACTION
 
-- Sau mỗi thay đổi → load `/skill:meilin-kb` → gọi `knowledgeStore` log chi tiết (file, diff, logic) vào wing phù hợp
-- Cuối mỗi session Pi → auto-save conversation summary vào wing `conversation`
+- Sau mỗi thay đổi → load `/skill:meilin-kb` → gọi `knowledgeStore` log chi tiết (file, diff, logic) vào `cyberbrain_knowledge` (domain phù hợp: code/ops/hardware/research)
+- Cuối mỗi session Pi → auto-save conversation summary vào `cyberbrain_episodic`
 
 ### QDRANT EMBEDDING PROTOCOL
 
@@ -46,7 +46,7 @@ User: Trương Công Định (SlncTrZ)
 
 ### REPO MAP (Updated 22/07/2026)
 
-Repo details: search Qdrant wing `tcdserver` topic `repo_map`. Active deploy targets: docker-all, Pi_Core (.227), 9router (upstream decolua/9router), openclaw (ghcr image).
+Repo details: search Qdrant domain `ops` topic `repo_map`. Active deploy targets: docker-all, Pi_Core (.227), 9router (upstream decolua/9router), openclaw (ghcr image).
 
 ### POST-CHANGE: `git add .` → `git commit -m "Fix/Feat/Refactor: msg"` → `git push origin main`
 
@@ -57,7 +57,7 @@ Repo details: search Qdrant wing `tcdserver` topic `repo_map`. Active deploy tar
 1. **Reuse First:** Tìm logic tương tự trong codebase trước khi viết mới (Anti-YAGNI)
 2. **TDD:** Test → Fail → Code → Pass → Refactor
 3. **Security:** No hardcoded keys. Validate inputs (XSS/CSRF/Injection). No sensitive data in errors
-4. **Wiki-First khi Search Web (BẮT BUỘC):** Khi Anh yêu cầu nghiên cứu/search thông tin → đầu tiên `knowledgeSearch` wing `omniscience_wiki` (score ≥ 0.7) → nếu có → trả lời trực tiếp, không web search. Nếu không có → `web_search` → tổng hợp → trả lời → lưu vào wiki (extension `web-wiki-saver` tự lưu, hoặc gọi `save_web_to_wiki` thủ công). Chi tiết: skill meilin-kb Section 8.
+4. **Wiki-First khi Search Web (BẮT BUỘC):** Khi Anh yêu cầu nghiên cứu/search thông tin → đầu tiên `knowledgeSearch` domain `research` (score ≥ 0.7) → nếu có → trả lời trực tiếp, không web search. Nếu không có → `web_search` → tổng hợp → trả lời → lưu vào `cyberbrain_knowledge` domain `research` (extension `web-wiki-saver` tự lưu, hoặc gọi `save_web_to_wiki` thủ công). Chi tiết: skill meilin-kb Section 8.
 
 ### Quy tắc 3 lần: Nếu 1 lỗi sửa quá 3 lần không xong → phải xin phép Anh để gọi agent nhóm hỗ trợ ngay. Không tự mày mò lòng vòng
 

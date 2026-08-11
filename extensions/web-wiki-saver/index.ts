@@ -1,14 +1,14 @@
 /**
- * web-wiki-saver — Auto-save web search results into the Qdrant omniscience_wiki wing.
+ * web-wiki-saver — Auto-save web search results into the Qdrant Cyber Brain.
  *
  * Cơ chế:
  *   - Bắt toolResult của web_search / source_check → lưu query + answer + sources
- *     vào collection meilin_omniscience_wiki (768d, Cosine)
+ *     vào collection cyberbrain_knowledge (768d, Cosine, domain=research)
  *   - ID deterministic theo (query + ngày) → upsert đè, không trùng lặp
  *   - Tool manual "save_web_to_wiki" để agent chủ động lưu khi cần
  *   - Quy trình search → wiki-first nằm trong skill meilin-kb + AGENTS.md
  *
- * Wing: omniscience_wiki | Topic: web_research | Updated: 2026-08-07 09:30
+ * Wing: research | Topic: web_research | Updated: 2026-08-11
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -26,8 +26,10 @@ const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.227:11434";
 const EMBED_MODEL = "nomic-embed-text";
 const EMBED_CHARS = 1000;
 const MIN_ANSWER_CHARS = 100; // kết quả dưới ngưỡng này không auto-lưu (tránh rác)
-const WING = "omniscience_wiki";
-const COLLECTION = "meilin_omniscience_wiki";
+const WING = "research";
+const COLLECTION = "cyberbrain_knowledge";
+const DOMAIN = "research";
+const PROJECT = "Slnc_Pi";
 
 /** Tool names được auto-capture */
 const SEARCH_TOOLS = new Set(["web_search", "source_check"]);
@@ -140,6 +142,9 @@ async function upsertToWiki(
 		vector,
 		payload: {
 			content,
+			domain: DOMAIN,
+			project: PROJECT,
+			source: "web_search",
 			wing: WING,
 			topic,
 			entity_name: topic,

@@ -1,11 +1,11 @@
 """
-MeiLin MCP Server - 6-Wing Palace Architecture
-6-Wing Knowledge + Conversation Memory Room
+MeiLin MCP Server - Cyber Brain (2 collection duy nhat)
+cyberbrain_knowledge + cyberbrain_episodic
 Tích hợp Atomic Knowledge Processor, Semantic Search, Knowledge Evolution
 
 Wing: code_chronicles
 Topic: mcp_server
-Last Updated: 2026-04-16
+Last Updated: 2026-08-11
 """
 
 import asyncio
@@ -71,7 +71,7 @@ async def handle_list_tools() -> list[types.Tool]:
         types.Tool(
             name="tech_find",
             description=(
-                "Tìm kiếm tri thức trong toàn bộ knowledge base (6 Wings). "
+                "Tìm kiếm tri thức trong toàn bộ Cyber Brain (2 collections). "
                 "Semantic search với Qdrant + nomic-embed-text."
             ),
             inputSchema={
@@ -80,7 +80,7 @@ async def handle_list_tools() -> list[types.Tool]:
                     "query": {"type": "string", "description": "Nội dung cần tra cứu"},
                     "wing": {
                         "type": "string",
-                        "description": "Lọc theo wing: tcdserver|openclaw|robotics|code_chronicles|omniscience_wiki|conversation",
+                        "description": "Lọc theo wing cũ hoặc domain (code|ops|hardware|research) hoặc conversation",
                     },
                 },
                 "required": ["query"],
@@ -102,7 +102,7 @@ async def handle_list_tools() -> list[types.Tool]:
         types.Tool(
             name="knowledge_store",
             description=(
-                "Lưu kiến thức vào 6-Wing Palace với Knowledge Evolution. "
+                "Lưu kiến thức vào Cyber Brain (cyberbrain_knowledge) với Knowledge Evolution. "
                 "Tự động phân loại, embed, soft delete bản cũ."
             ),
             inputSchema={
@@ -111,7 +111,7 @@ async def handle_list_tools() -> list[types.Tool]:
                     "content": {"type": "string", "description": "Nội dung kiến thức"},
                     "wing": {
                         "type": "string",
-                        "description": "Wing: tcdserver|openclaw|robotics|code_chronicles|omniscience_wiki|conversation",
+                        "description": "Wing cũ hoặc domain (code|ops|hardware|research). conversation → episodic",
                     },
                     "topic": {
                         "type": "string",
@@ -134,8 +134,8 @@ async def handle_list_tools() -> list[types.Tool]:
         types.Tool(
             name="knowledge_search",
             description=(
-                "Tìm kiếm ngữ nghĩa toàn bộ 6 Wings. "
-                "Trả về kết quả kèm score, wing, topic, version."
+                "Tìm kiếm ngữ nghĩa toàn bộ Cyber Brain (2 collections). "
+                "Trả về kết quả kèm score, domain, topic, version."
             ),
             inputSchema={
                 "type": "object",
@@ -175,7 +175,7 @@ async def handle_list_tools() -> list[types.Tool]:
         types.Tool(
             name="conversation_save",
             description=(
-                "Lưu đoạn hội thoại vào memory room (meilin_conversation). "
+                "Lưu đoạn hội thoại vào memory room (cyberbrain_episodic). "
                 "Dùng để MeiLin nhớ ngữ cảnh trò chuyện trước đó."
             ),
             inputSchema={
@@ -202,7 +202,7 @@ async def handle_list_tools() -> list[types.Tool]:
         types.Tool(
             name="conversation_recall",
             description=(
-                "Tìm kiếm trong lịch sử hội thoại. Semantic search qua meilin_conversation. "
+                "Tìm kiếm trong lịch sử hội thoại. Semantic search qua cyberbrain_episodic. "
                 "Giúp MeiLin nhớ lại ngữ cảnh trò chuyện cũ."
             ),
             inputSchema={
@@ -423,6 +423,7 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[types.Text
                     "channel": args.get("channel", "unknown"),
                     "role": args.get("role", "user"),
                     "session_id": args.get("session_id", ""),
+                    "agent_name": "pi",
                     "timestamp": int(time.time() * 1000),
                 },
             )
