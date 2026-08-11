@@ -32,7 +32,9 @@ html {
 body {
 	background: var(--bg);
 	color: var(--fg);
-	font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+	font-family:
+		"Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial,
+		sans-serif;
 	font-size: 16px;
 	line-height: 1.75;
 	max-width: 820px;
