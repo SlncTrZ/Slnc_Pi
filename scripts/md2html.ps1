@@ -48,7 +48,7 @@ if ($LASTEXITCODE -ne 0) { Write-Error "scp theme.css lên thất bại"; exit 1
 
 # ─── Bước 2: convert bằng Pandoc (Docker .227) ─────────────
 Write-Host "2/4 Convert bằng Pandoc (Docker .227)..." -ForegroundColor Cyan
-$cmd = "cd $ComposeDir && docker compose --profile tools run --rm pandoc -s --toc --embed-resources --standalone --toc-depth=2 -c /data/theme.css -f markdown -t html5 $mdName -o $htmlName"
+$cmd = "cd $ComposeDir && docker compose --profile tools run --rm pandoc -s --toc --embed-resources --standalone --toc-depth=2 --syntax-highlighting=tango -c /data/theme.css -f markdown -t html5 $mdName -o $htmlName"
 ssh -o ConnectTimeout=10 $Server $cmd
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Pandoc convert thất bại (lần đầu sẽ pull image ~50MB — chờ vài phút). Xem log trên .227."
