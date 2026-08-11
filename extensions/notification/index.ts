@@ -1673,15 +1673,28 @@ function stripMarkdownForSpeech(markdown: string): string {
 		.replace(/\s+/g, " ")
 		.trim();
 
-	// Avoid reading common code-ish leftovers as one long token.
-	text = text
-		.replace(/\b[a-zA-Z]:\\\S+/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
-	return text;
-}
-
-/** Count approximate sentences using terminal punctuation (. ! ?). */
+    	// Avoid reading common code-ish leftovers as one long token.
+    	text = text
+    		.replace(/\b[a-zA-Z]:\\\S+/g, " ")
+    		.replace(/\s+/g, " ")
+    		.trim();
+    	return text;
+    }
+    
+    /**
+     * Loại bỏ emoji / sticker / ký tự đặc biệt (✅👉⚠️🎉🚀📌...) để OmniVoice đọc được.
+     */
+    function stripEmojiForSpeech(text: string): string {
+    	return text
+    		.replace(
+    			/[\u{1F000}-\u{1FAFF}\u{1F100}-\u{1F1FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{2B50}\u{2705}\u{274C}\u{2764}\u{2714}]/gu,
+    			" ",
+    		)
+    		.replace(/\s+/g, " ")
+    		.trim();
+    }
+    
+    /** Count approximate sentences using terminal punctuation (. ! ?). */
 function countSentences(text: string): number {
 	const matches = text.match(/[.!?]+\s+/g);
 	return matches ? matches.length : text.trim().length > 0 ? 1 : 0;
@@ -2297,7 +2310,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 							? await summarizeText(cleaned, settings, ctx)
 							: await naturalizeText(cleaned, settings, ctx);
 					if (transformed === null) return; // error already shown, skip TTS
-					ttsText = transformed;
+					ttsText = stripEmojiForSpeech(transformed);
 					pi.sendMessage({
 						customType: SUMMARY_MESSAGE_TYPE,
 						content: transformed,
