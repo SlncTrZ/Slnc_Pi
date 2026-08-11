@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>2026-08-11-incident-mcp-sync</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ background-color: #f8f8f8; }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ef2929; } 
+code span.an { color: #8f5902; font-weight: bold; font-style: italic; } 
+code span.at { color: #204a87; } 
+code span.bn { color: #0000cf; } 
+code span.cf { color: #204a87; font-weight: bold; } 
+code span.ch { color: #4e9a06; } 
+code span.cn { color: #8f5902; } 
+code span.co { color: #8f5902; font-style: italic; } 
+code span.cv { color: #8f5902; font-weight: bold; font-style: italic; } 
+code span.do { color: #8f5902; font-weight: bold; font-style: italic; } 
+code span.dt { color: #204a87; } 
+code span.dv { color: #0000cf; } 
+code span.er { color: #a40000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #0000cf; } 
+code span.fu { color: #204a87; font-weight: bold; } 
+code span.im { } 
+code span.in { color: #8f5902; font-weight: bold; font-style: italic; } 
+code span.kw { color: #204a87; font-weight: bold; } 
+code span.op { color: #ce5c00; font-weight: bold; } 
+code span.ot { color: #8f5902; } 
+code span.pp { color: #8f5902; font-style: italic; } 
+code span.sc { color: #ce5c00; font-weight: bold; } 
+code span.ss { color: #4e9a06; } 
+code span.st { color: #4e9a06; } 
+code span.va { color: #000000; } 
+code span.vs { color: #4e9a06; } 
+code span.wa { color: #8f5902; font-weight: bold; font-style: italic; } 
+</style>
+  <style type="text/css">:root {color-scheme: dark;--bg: #0d1117;--panel: #161b22;--panel2: #1c2333;--border: #30363d;--txt: #e6edf3;--muted: #8b949e;--accent: #58a6ff;--green: #3fb950;--red: #f85149;--orange: #d29922;--purple: #bc8cff;--cyan: #39c5cf;}html {-webkit-text-size-adjust: 100%;}body {background: var(--bg);color: var(--txt);font-family: "Segoe UI", system-ui, -apple-system, sans-serif;font-size: 16px;line-height: 1.55;max-width: 1080px;margin: 0 auto;padding: 28px 24px 60px;}header#title-block-header {margin-bottom: 30px;padding-bottom: 16px;border-bottom: 1px solid var(--border);}h1.title {font-size: 1.7rem;margin: 0 0 4px;color: var(--txt);}p.subtitle {color: var(--muted);font-size: 0.9rem;margin: 0 0 18px;}p.author,p.date {display: inline-block;padding: 2px 10px;border-radius: 999px;font-size: 0.75rem;font-weight: 600;margin: 0 6px 4px 0;background: #12273d;color: var(--accent);}h1,h2,h3,h4,h5,h6 {color: var(--txt);line-height: 1.4;margin-top: 34px;margin-bottom: 14px;}h1 {font-size: 1.6rem;}h2 {font-size: 1.2rem;padding-left: 10px;border-left: 4px solid var(--accent);}h3 {font-size: 1.05rem;color: var(--accent);}h4 {font-size: 0.95rem;}h5 {font-size: 0.9rem;color: var(--muted);}h6 {font-size: 0.85rem;color: var(--muted);}p {margin: 0.75rem 0;}a {color: var(--accent);text-decoration: none;}a:hover {text-decoration: underline;}strong {font-weight: 600;color: #f0f6fc;}em {color: var(--muted);}hr {border: none;border-top: 1px solid var(--border);margin: 34px 0;}ul,ol {padding-left: 1.6rem;margin: 0.75rem 0;}li {margin: 0.35rem 0;}code {font-family: "Cascadia Code", ui-monospace, Consolas, monospace;font-size: 0.85em;background: rgba(255, 255, 255, 0.06);color: var(--cyan);border-radius: 5px;padding: 0.12em 0.4em;}pre {background: #0a0e14;color: #c9d1d9;border: 1px solid var(--border);border-radius: 6px;padding: 12px 14px;overflow-x: auto;font-size: 0.85rem;line-height: 1.55;margin: 1rem 0;}pre code {background: transparent;color: inherit;padding: 0;font-size: inherit;}div.sourceCode pre,pre.sourceCode {background: #0a0e14 !important;color: #c9d1d9;}div.sourceCode {margin: 1rem 0;}table {width: 100%;border-collapse: collapse;background: var(--panel);border: 1px solid var(--border);border-radius: 10px;overflow: hidden;font-size: 0.9rem;margin: 1.25rem 0;display: block;overflow-x: auto;}th,td {padding: 10px 12px;text-align: left;vertical-align: top;}thead th {background: var(--panel2);color: var(--muted);font-size: 0.78rem;text-transform: uppercase;letter-spacing: 0.4px;}tbody tr:nth-child(even) {background: rgba(255, 255, 255, 0.02);}tbody tr:hover {background: rgba(88, 166, 255, 0.06);}blockquote {margin: 1.25rem 0;padding: 14px 16px;background: var(--panel);border: 1px solid var(--border);border-left: 4px solid var(--accent);border-radius: 10px;}blockquote p {margin: 0.4rem 0;}blockquote p:first-child {margin-top: 0;}blockquote p:last-child {margin-bottom: 0;}nav#TOC {background: var(--panel);border: 1px solid var(--border);border-radius: 10px;padding: 14px 18px;margin: 20px 0 30px;}nav#TOC > ul {list-style: none;padding-left: 0;margin: 8px 0 0;columns: 2;column-gap: 2rem;}nav#TOC ul ul {list-style: none;padding-left: 1.2rem;margin: 0.1rem 0;}nav#TOC a {display: block;padding: 0.12rem 0;font-size: 0.88rem;color: var(--muted);}nav#TOC a:hover {color: var(--accent);}nav#TOC::before {content: "Mục lục";display: block;font-weight: 600;font-size: 0.78rem;text-transform: uppercase;letter-spacing: 0.4px;color: var(--muted);}@media (max-width: 800px) {nav#TOC > ul {columns: 1;}}img {max-width: 100%;height: auto;border-radius: 6px;}mark {background: #2c1f45;color: var(--purple);padding: 0 0.2em;border-radius: 3px;}kbd {font-family: inherit;background: var(--panel2);border: 1px solid var(--border);border-bottom-width: 2px;border-radius: 5px;padding: 0.1em 0.45em;font-size: 0.85em;}details summary {cursor: pointer;color: var(--accent);font-size: 0.85rem;user-select: none;}@media print {body {background: #fff;color: #000;max-width: none;padding: 1rem;}nav#TOC {display: none;}a {color: #000;}}.kpis {display: grid;grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));gap: 14px;margin: 20px 0;}.kpi {background: var(--panel);border: 1px solid var(--border);border-radius: 10px;padding: 16px;}.kpi .lbl {color: var(--muted);font-size: 0.78rem;text-transform: uppercase;letter-spacing: 0.4px;}.kpi .val {font-size: 1.55rem;font-weight: 700;margin-top: 4px;}.kpi .val small {font-size: 0.85rem;color: var(--muted);font-weight: 400;}.kpi .note {font-size: 0.78rem;color: var(--muted);margin-top: 4px;}.chart-row {display: grid;grid-template-columns: 130px 1fr 90px;align-items: center;gap: 10px;margin: 8px 0;font-size: 0.85rem;}.bar-bg {background: var(--panel2);border-radius: 6px;height: 22px;overflow: hidden;}.bar {height: 100%;border-radius: 6px;display: flex;align-items: center;justify-content: flex-end;padding-right: 8px;font-size: 0.7rem;color: #fff;font-weight: 600;min-width: 30px;}.bar.cpu {background: linear-gradient(90deg, #1f6feb, #58a6ff);}.bar.gpu {background: linear-gradient(90deg, #6e40c9, #bc8cff);}.legend {display: flex;gap: 18px;margin: 10px 0 16px;font-size: 0.82rem;color: var(--muted);}.dot {display: inline-block;width: 11px;height: 11px;border-radius: 3px;margin-right: 5px;vertical-align: -1px;}.prompt {background: var(--panel);border: 1px solid var(--border);border-radius: 10px;margin: 14px 0;overflow: hidden;}.prompt-head {padding: 13px 16px;background: var(--panel2);display: flex;justify-content: space-between;align-items: center;flex-wrap: wrap;gap: 8px;}.prompt-head .q {font-weight: 600;}.prompt-body {padding: 16px;}.cols {display: grid;grid-template-columns: 1fr 1fr;gap: 14px;}@media (max-width: 800px) {.cols {grid-template-columns: 1fr;}}.box {background: rgba(255, 255, 255, 0.03);border: 1px solid var(--border);border-radius: 8px;padding: 12px;}.box h4 {font-size: 0.85rem;margin-bottom: 8px;}.box.cpu h4 {color: var(--accent);}.box.gpu h4 {color: var(--purple);}.box pre {white-space: pre-wrap;word-break: break-word;font-family: "Cascadia Code", Consolas, monospace;font-size: 0.82rem;background: #0a0e14;padding: 10px;border-radius: 6px;max-height: 340px;overflow-y: auto;}.box .meta {font-size: 0.76rem;color: var(--muted);margin-bottom: 8px;}.badge {display: inline-block;padding: 2px 10px;border-radius: 999px;font-size: 0.75rem;font-weight: 600;margin-left: 6px;}.b-green {background: #1a3a24;color: var(--green);}.b-red {background: #3d1c1c;color: var(--red);}.b-orange {background: #3d2f12;color: var(--orange);}.b-blue {background: #12273d;color: var(--accent);}.b-purple {background: #2c1f45;color: var(--purple);}.score {display: inline-flex;align-items: center;gap: 6px;}.score .pts {font-weight: 700;font-size: 1.05rem;}.verdict {background: linear-gradient(135deg, #12273d, #2c1f45);border: 1px solid var(--border);border-radius: 12px;padding: 20px;margin-top: 18px;}.verdict h3 {color: var(--accent);margin-bottom: 10px;}ul.analysis {list-style: none;}ul.analysis li {padding: 8px 0 8px 26px;position: relative;border-bottom: 1px solid rgba(255, 255, 255, 0.04);}ul.analysis li::before {content: "▸";position: absolute;left: 6px;color: var(--accent);}</style>
+</head>
+<body>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#báo-cáo-sự-cố-mcp-startup-fail-tui-jump-pi-exit-ctx-stale" id="toc-báo-cáo-sự-cố-mcp-startup-fail-tui-jump-pi-exit-ctx-stale">Báo
+Cáo Sự Cố: MCP Startup Fail + TUI Jump + Pi Exit (ctx stale)</a>
+<ul>
+<li><a href="#executive-summary" id="toc-executive-summary">1. Executive
+Summary</a></li>
+<li><a href="#diễn-biến-bằng-chứng-từng-vụ" id="toc-diễn-biến-bằng-chứng-từng-vụ">2. Diễn biến &amp; Bằng chứng từng
+vụ</a></li>
+<li><a href="#so-sánh-bảng-tổng-hợp" id="toc-so-sánh-bảng-tổng-hợp">3.
+So sánh — Bảng tổng hợp</a></li>
+<li><a href="#root-cause-analysis-gốc-rễ-chung" id="toc-root-cause-analysis-gốc-rễ-chung">4. Root Cause Analysis — Gốc
+rễ chung</a></li>
+<li><a href="#khuyến-nghị-adr-chốt" id="toc-khuyến-nghị-adr-chốt">5.
+Khuyến nghị — ADR chốt</a></li>
+<li><a href="#kết-luận" id="toc-kết-luận">6. Kết luận</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="báo-cáo-sự-cố-mcp-startup-fail-tui-jump-pi-exit-ctx-stale">Báo
+Cáo Sự Cố: MCP Startup Fail + TUI Jump + Pi Exit (ctx stale)</h1>
+<p><strong>Ngày lập:</strong> 2026-08-11 23:20 · <strong>Loại:</strong>
+Phân tích sự cố (Incident Postmortem) <strong>Phạm vi:</strong> Cấu hình
+Pi local (Windows) · MCP servers · Extension notification ·
+sync-config.ps1 <strong>Nguồn chính:</strong> Kiểm chứng thực nghiệm
+(SSH .227, Qdrant REST, git log, test handshake MCP) — không suy
+đoán</p>
+<hr />
+<div class="kpis">
+<div class="kpi">
+<div class="lbl">
+Tổng lỗi phát hiện
+</div>
+<div class="val" style="color:var(--red)">
+5 <small>vụ</small>
+</div>
+<div class="note">
+Trong 1 phiên làm việc
+</div>
+</div>
+<div class="kpi">
+<div class="lbl">
+Đã fix + push
+</div>
+<div class="val" style="color:var(--green)">
+4 <small>/5</small>
+</div>
+<div class="note">
+Còn 1 chưa fix (ctx stale)
+</div>
+</div>
+<div class="kpi">
+<div class="lbl">
+Root cause chung
+</div>
+<div class="val" style="color:var(--accent)">
+1 <small>gốc</small>
+</div>
+<div class="note">
+sync-config.ps1 ghi đè
+</div>
+</div>
+<div class="kpi">
+<div class="lbl">
+Commit đã push
+</div>
+<div class="val" style="color:var(--purple)">
+6 <small>commits</small>
+</div>
+<div class="note">
+62be6b9 → e7442e7
+</div>
+</div>
+</div>
+<hr />
+<h2 id="executive-summary">1. Executive Summary</h2>
+<ul>
+<li><strong>Trong một phiên</strong>, 4 lỗi độc lập cùng xuất hiện (MCP
+ECONNREFUSED, MCP Connection closed, voice-input worker down, TUI
+scroll-jump) + 1 lỗi crash <strong>làm Pi thoát hẳn</strong>
+(<code>uncaughtException: extension ctx is stale</code>).</li>
+<li><strong>4/5 lỗi có chung một gốc rễ</strong>: script
+<code>sync-config.ps1</code> đồng bộ 1 chiều <strong>repo → local (ghi
+đè)</strong> đã đẩy bản config repo cũ — chứa dịch vụ đã chết
+(<code>mempalace</code>) và placeholder không được Pi hỗ trợ
+(<code>{{PI_AGENT_DIR}}</code>) — <strong>ghi đè lên config local đã
+được fix đúng</strong>.</li>
+<li><strong>Lỗi meilin-brain ban đầu bị chẩn đoán nhầm là “race
+condition khởi động”</strong> — sự thật (kiểm chứng sau): Pi
+<strong>không expand</strong> <code>{{PI_AGENT_DIR}}</code> (docs Pi
+không hỗ trợ) → python nhận path không tồn tại → process thoát ngay →
+“Connection closed”. Import thực tế chỉ mất <strong>0.14s</strong> —
+không hề chậm.</li>
+<li><strong>Lỗi thứ 5 (chưa fix)</strong>: extension
+<code>notification</code> capture
+<code>pi.events</code>/<code>ctx</code> cũ; sau <code>/reload</code>,
+<code>TtsQueue.drain()</code> gọi
+<code>this.events?.emit(&quot;tts:end&quot;)</code> (index.ts:2229) → loader
+<code>assertActive</code> ném lỗi → <strong>uncaughtException → Pi
+thoát</strong>. <code>notifyFailure</code> đã được guard (commit
+e515f36, 49d010a) nhưng <strong>các lệnh <code>events.emit</code> trong
+TtsQueue chưa được guard</strong>.</li>
+<li><strong>Kết quả</strong>: 4/5 lỗi đã fix + push (6 commits), 8/8
+file config local == repo; lỗi ctx stale còn chờ fix (đề xuất guard
+emit).</li>
+</ul>
+<hr />
+<h2 id="diễn-biến-bằng-chứng-từng-vụ">2. Diễn biến &amp; Bằng chứng từng
+vụ</h2>
+<h3 id="vụ-1-mcp-mempalace-econnrefused-192.168.1.2273002">Vụ 1 — MCP
+<code>mempalace</code>:
+<code>ECONNREFUSED 192.168.1.227:3002</code></h3>
+<p><strong>Triệu chứng (lúc khởi động Pi):</strong></p>
+<pre><code>Error: MCP: Failed to connect to mempalace: SSE error: TypeError: fetch failed: connect ECONNREFUSED 192.168.1.227:3002
+MCP: 1/3 servers connected (6 tools)</code></pre>
+<p><strong>Kiểm chứng (SSH .227):</strong></p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> docker ps <span class="at">--format</span> <span class="st">&#39;{{.Names}}\t{{.Ports}}&#39;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">ollama</span>    Up 2 hours   0.0.0.0:11434-<span class="op">&gt;</span>11434/tcp</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">pi-core</span>   Up 3 hours   0.0.0.0:3003-<span class="op">&gt;</span>3003/tcp      ← 3003 OK</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">qdrant</span>    Up 3 hours   0.0.0.0:6333-6334-<span class="op">&gt;</span>6333-6334/tcp</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> curl <span class="at">-m5</span> 192.168.1.227:3002/mcp  → HTTP 000 <span class="er">(</span><span class="ex">không</span> có gì lắng nghe<span class="kw">)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> curl <span class="at">-m5</span> 192.168.1.227:3003/mcp  → HTTP 200</span></code></pre></div>
+<p><strong>Kết luận:</strong> <code>mempalace</code> đã bị gỡ khỏi .227
+(không còn container/service port 3002) nhưng <strong>vẫn còn khai báo
+trong config</strong> — và bị <code>sync-config.ps1</code> kéo về từ
+repo (repo <code>pi-config/mcp.json</code> chưa bao giờ được cập nhật —
+git log chỉ có commit setup <code>b736c3e</code>).</p>
+<hr />
+<h3 id="vụ-2-mcp-meilin-brain-mcp-error--32000-connection-closed">Vụ 2 —
+MCP <code>meilin-brain</code>:
+<code>MCP error -32000: Connection closed</code></h3>
+<p><strong>Triệu chứng:</strong></p>
+<pre><code>Error: MCP: Failed to connect to meilin-brain: MCP error -32000: Connection closed</code></pre>
+<p><strong>Chẩn đoán ban đầu (SAI):</strong> “race condition — import
+nặng, Pi gửi initialize quá sớm”. <strong>Kiểm chứng
+(đúng):</strong></p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Import nhanh — không phải race:</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> python <span class="at">-c</span> <span class="st">&quot;import meilin_knowledge.config, ...&quot;</span>  → Import xong sau 0.14s</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Path trong config không tồn tại khi không được expand:</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> ls <span class="st">&quot;{{PI_AGENT_DIR}}/git/github.com/SlncTrZ/Slnc_Pi/extensions/meilin-mcp/meilin_mcp.py&quot;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="ex">ls:</span> cannot access <span class="st">&#39;{{PI_AGENT_DIR}}/...&#39;</span>: No such file or directory</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Docs Pi KHÔNG hỗ trợ placeholder này:</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> rg <span class="st">&quot;PI_AGENT_DIR&quot;</span> node_modules/@earendil-works/pi-coding-agent/<span class="dt">{README.md</span><span class="op">,</span><span class="dt">docs}</span>  → <span class="er">(</span><span class="ex">rỗng</span><span class="kw">)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Path đầy đủ → handshake THÀNH CÔNG:</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> echo <span class="st">&#39;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;initialize&quot;,...}&#39;</span> <span class="kw">|</span> <span class="ex">python</span> <span class="st">&quot;C:/Users/truon/.pi/agent/.../meilin_mcp.py&quot;</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="dt">{</span><span class="st">&quot;jsonrpc&quot;</span><span class="dt">:</span><span class="st">&quot;2.0&quot;</span><span class="op">,</span><span class="st">&quot;id&quot;</span><span class="dt">:1</span><span class="op">,</span><span class="st">&quot;result&quot;</span><span class="dt">:{...</span><span class="op">,</span><span class="st">&quot;serverInfo&quot;</span><span class="dt">:{</span><span class="st">&quot;name&quot;</span><span class="dt">:</span><span class="st">&quot;meilin-brain&quot;</span><span class="op">,</span><span class="st">&quot;version&quot;</span><span class="dt">:</span><span class="st">&quot;1.28.1&quot;</span><span class="dt">}}}</span></span></code></pre></div>
+<p><strong>Kết luận:</strong> <code>{{PI_AGENT_DIR}}</code> là template
+<strong>tự đặt</strong>, Pi đọc nguyên văn → python nhận path không tồn
+tại → process thoát ngay → “Connection closed”. <strong>Fix:</strong>
+dùng path đầy đủ (commit <code>e7442e7</code>), đúng như bản
+<code>.bak</code> đã chạy OK từ chiều.</p>
+<hr />
+<h3 id="vụ-3-voice-input-could-not-connect-to-127.0.0.18766">Vụ 3 —
+Voice-input: <code>could not connect to 127.0.0.1:8766</code></h3>
+<p><strong>Triệu chứng:</strong></p>
+<pre><code>Error: [voice-input] worker connection failed: could not connect to 127.0.0.1:8766</code></pre>
+<p><strong>Kiểm chứng:</strong> - <code>voice-input.json</code> bản repo
+(bị sync đè):
+<code>workerCommand = [&quot;python&quot;, &quot;{{PI_AGENT_DIR}}/.../sherpa_worker.py&quot;]</code>
+→ path không tồn tại → worker không start → health check 8766 fail. -
+Bản <code>.bak</code> (bản local trước sync): path đầy đủ
+<code>C:/Users/truon/.pi/agent/...</code> — đã chạy OK (log worker có
+<code>Uvicorn running on 127.0.0.1:8766</code>, health 200).</p>
+<p><strong>Kết luận:</strong> <strong>Cùng lỗi placeholder</strong> với
+Vụ 2. Fix: revert bản <code>.bak</code> (commit
+<code>dc7aed2</code>).</p>
+<hr />
+<h3 id="vụ-4-pi-tui-bị-nhảy-scroll-về-đầu">Vụ 4 — Pi TUI bị nhảy scroll
+về đầu</h3>
+<p><strong>Triệu chứng:</strong> Pi TUI (Windows CMD/Windows Terminal)
+tự nhảy viewport về đầu khi full re-render — <strong>tái phát</strong>
+sau khi đã fix hôm trước.</p>
+<p><strong>Kiểm chứng (chuỗi bằng chứng):</strong></p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Fix hôm trước (trong KB): thêm &quot;tuiMode&quot;: &quot;fullscreen&quot; vào settings.json</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co"># → tránh ESC[3J (clear scrollback) khi full re-render</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> rg <span class="st">&quot;tuiMode&quot;</span> ~/.pi/agent/settings.json.bak   → 20: <span class="st">&quot;tuiMode&quot;</span>: <span class="st">&quot;fullscreen&quot;</span>   ← bản đã fix</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> rg <span class="st">&quot;tuiMode&quot;</span> ~/.pi/agent/settings.json       → <span class="er">(</span><span class="ex">không</span> có<span class="kw">)</span>                    <span class="ex">←</span> bị sync ghi đè</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> rg <span class="st">&quot;tuiMode&quot;</span> pi-config/settings.json         → <span class="er">(</span><span class="ex">không</span> có<span class="kw">)</span>                    <span class="ex">←</span> repo chưa bao giờ có</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> git log <span class="at">--</span> pi-config/settings.json           → chỉ 1 commit b736c3e <span class="er">(</span><span class="ex">setup</span><span class="kw">)</span></span></code></pre></div>
+<p><strong>Kết luận:</strong> Fix hôm trước chỉ nằm ở local; repo giữ
+bản <code>0.82.0</code> cũ; <code>sync-config.ps1</code> ghi đè local →
+mất <code>tuiMode</code> → TUI nhảy lại. Fix: thêm lại + đồng bộ repo
+(commit <code>7e9b7bc</code>).</p>
+<hr />
+<h3 id="vụ-5-pi-exiting-due-to-uncaughtexception-extension-ctx-is-stale-chưa-fix">Vụ
+5 —
+<code>pi exiting due to uncaughtException: extension ctx is stale</code>
+⚠️ CHƯA FIX</h3>
+<p><strong>Triệu chứng (Pi thoát hẳn):</strong></p>
+<pre><code>pi exiting due to uncaughtException:
+Error: This extension ctx is stale after session replacement or reload.
+Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(),
+ctx.switchSession(), or ctx.reload().
+    at Object.assertActive (loader.js:141:19)
+    at Object.emit (loader.js:335:25)
+    at TtsQueue.drain (extensions/notification/index.ts:2229:20)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)</code></pre>
+<p><strong>Phân tích code
+(extensions/notification/index.ts):</strong></p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="kw">async</span> <span class="fu">drain</span>()<span class="op">:</span> <span class="bu">Promise</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">&gt;</span> {</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="kw">this</span><span class="op">.</span><span class="at">running</span>) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">running</span> <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> {</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> (<span class="kw">this</span><span class="op">.</span><span class="at">queue</span><span class="op">.</span><span class="at">length</span> <span class="op">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>            <span class="kw">const</span> next <span class="op">=</span> <span class="kw">this</span><span class="op">.</span><span class="at">queue</span><span class="op">.</span><span class="fu">shift</span>()<span class="op">;</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> (<span class="op">!</span>next) <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">try</span> {</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>                <span class="cf">await</span> <span class="fu">speakText</span>(next<span class="op">,</span> <span class="kw">this</span><span class="op">.</span><span class="fu">getSettings</span>())<span class="op">;</span>   <span class="co">// TTS chậm — queue có thể chạy xuyên qua reload</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>            } <span class="cf">catch</span> (error) {</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>                <span class="fu">notifyFailure</span>(<span class="kw">this</span><span class="op">.</span><span class="at">ctx</span><span class="op">,</span> <span class="op">...</span>)<span class="op">;</span>                <span class="co">// ✅ ĐÃ GUARD (e515f36, 49d010a)</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>            }</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>        <span class="kw">this</span><span class="op">.</span><span class="at">events</span><span class="op">?.</span><span class="fu">emit</span>(<span class="st">&quot;tts:end&quot;</span>)<span class="op">;</span>                        <span class="co">// ❌ DÒNG 2229 — CHƯA GUARD → crash</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    } <span class="cf">finally</span> { <span class="op">...</span> }</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p><strong>Cơ chế:</strong> <code>TtsQueue</code> capture
+<code>pi.events</code> + <code>this.ctx</code> lúc khởi tạo extension.
+Nếu Anh <code>/reload</code> (hoặc newSession/fork/switchSession)
+<strong>trong khi TTS queue đang chạy</strong> (đang phát audio / còn
+item), <code>drain()</code> (async) tiếp tục sau reload →
+<code>this.events?.emit(&quot;tts:end&quot;)</code> gọi trên events cũ → loader
+<code>assertActive</code> ném lỗi → <strong>uncaughtException → Pi thoát
+hẳn</strong>. Cùng họ lỗi với <code>notifyFailure</code> đã fix trước đó
+— nhưng <strong>sót các lệnh <code>events.emit</code></strong>.</p>
+<p><strong>Trạng thái:</strong> Chưa fix (đề xuất ở mục 5).</p>
+<hr />
+<h2 id="so-sánh-bảng-tổng-hợp">3. So sánh — Bảng tổng hợp</h2>
+<table>
+<colgroup>
+<col style="width: 6%" />
+<col style="width: 10%" />
+<col style="width: 36%" />
+<col style="width: 23%" />
+<col style="width: 23%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Lỗi</th>
+<th>Nguyên nhân gốc</th>
+<th>Bằng chứng</th>
+<th>Trạng thái</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>mempalace ECONNREFUSED :3002</td>
+<td>Config khai báo service đã chết + sync kéo về từ repo</td>
+<td><code>docker ps</code> không có :3002; curl HTTP 000</td>
+<td>✅ Fix <code>62be6b9</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>meilin-brain Connection closed</td>
+<td><code>{{PI_AGENT_DIR}}</code> — Pi không expand → path sai</td>
+<td><code>ls</code> No such file; docs Pi rỗng; import 0.14s; handshake
+OK với path thật</td>
+<td>✅ Fix <code>e7442e7</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>voice-input :8766 down</td>
+<td>Cùng placeholder trong <code>workerCommand</code></td>
+<td><code>.bak</code> path đầy đủ chạy OK; repo placeholder fail</td>
+<td>✅ Fix <code>dc7aed2</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>TUI scroll-jump tái phát</td>
+<td>sync ghi đè <code>settings.json</code> mất <code>tuiMode</code></td>
+<td><code>.bak</code> dòng 20 có tuiMode; repo không</td>
+<td>✅ Fix <code>7e9b7bc</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Pi exit ctx stale</td>
+<td><code>TtsQueue.drain</code> emit trên events cũ sau reload</td>
+<td>Stack trace index.ts:2229; <code>notifyFailure</code> đã guard nhưng
+<code>emit</code> chưa</td>
+<td>❌ Chưa fix</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Phương án khắc phục Vụ 5 (so sánh):</strong></p>
+<table>
+<colgroup>
+<col style="width: 47%" />
+<col style="width: 21%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>Phương án</th>
+<th>Ưu</th>
+<th>Nhược</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A. Guard <code>events.emit</code> bằng try/catch (giống
+notifyFailure)</td>
+<td>Nhỏ, nhanh, đúng pattern đã có</td>
+<td>Không thông báo được lỗi (chỉ log)</td>
+</tr>
+<tr>
+<td>B. Kiểm tra stale trước khi emit (API Pi có sẵn cách check)</td>
+<td>Chủ động, không nuốt lỗi</td>
+<td>Cần biết API cụ thể</td>
+</tr>
+<tr>
+<td>C. Không emit sau reload (skip nếu stale)</td>
+<td>Triệt để</td>
+<td>Phức tạp hơn</td>
+</tr>
+<tr>
+<td><strong>Khuyến nghị: A</strong></td>
+<td>Đúng pattern hiện có, rủi ro thấp nhất</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="root-cause-analysis-gốc-rễ-chung">4. Root Cause Analysis — Gốc
+rễ chung</h2>
+<pre><code>sync-config.ps1 (repo → local, 1 chiều, ghi đè -Force)
+        │
+        ├──► V1: đưa mempalace (service chết) về config  → ECONNREFUSED
+        ├──► V2: đưa {{PI_AGENT_DIR}} placeholder về mcp.json → Connection closed
+        ├──► V3: đưa placeholder về voice-input.json → worker down
+        └──► V4: ghi đè settings.json bỏ tuiMode → TUI jump
+V5 (ctx stale) — độc lập: extension notification không guard events.emit sau reload</code></pre>
+<p><strong>Hai nguyên nhân cấu trúc:</strong> 1.
+<strong><code>sync-config.ps1</code> thiếu an toàn</strong> (đã xoá):
+ghi đè mù không diff/confirm, backup 1 lớp <code>.bak</code>, không
+audit log — repo (nguồn chuẩn) không bao giờ được cập nhật sau commit
+setup → mỗi lần sync là một lần <strong>phá config local đã
+fix</strong>. 2. <strong>Placeholder <code>{{PI_AGENT_DIR}}</code> tự
+đặt</strong> trong config: Pi không hỗ trợ expand → path sai âm thầm,
+lỗi hiển thị khó hiểu (“Connection closed” thay vì “file not
+found”).</p>
+<hr />
+<h2 id="khuyến-nghị-adr-chốt">5. Khuyến nghị — ADR chốt</h2>
+<ol type="1">
+<li><strong>ADR-01 ✅ Đã thực hiện (<code>dc7aed2</code>)</strong>:
+<strong>Xoá <code>sync-config.ps1</code></strong> — không file nào khác
+gọi nó (đã kiểm tra). Quy trình mới: sửa config local → kiểm tra chạy OK
+→ <strong>cập nhật repo tương ứng</strong> (repo phản ánh local, không
+ngược lại).</li>
+<li><strong>ADR-02 ✅ Đã thực hiện (<code>e7442e7</code>)</strong>:
+<strong>Cấm placeholder không được Pi hỗ trợ</strong> trong config —
+dùng path đầy đủ tuyệt đối. Đã rà soát: không còn <code>{{...}}</code>
+nào trong <code>~/.pi/agent/*.json</code>.</li>
+<li><strong>ADR-03 ⏳ Đề xuất (Vụ 5)</strong>: Guard <strong>tất
+cả</strong> <code>this.events?.emit(...)</code> trong
+<code>TtsQueue</code> (enqueue <code>tts:start</code> + drain
+<code>tts:end</code>) bằng try/catch — đúng pattern
+<code>notifyFailure</code> đã áp dụng. Trước khi fix: <strong>tránh
+<code>/reload</code> khi TTS đang phát</strong>, hoặc chấp nhận rủi
+ro.</li>
+<li><strong>ADR-04 ✅</strong>:
+<code>mcp.json</code>/<code>settings.json</code> — sau mỗi thay đổi
+config, xác minh <code>local == repo</code> (8/8 file đã khớp).</li>
+</ol>
+<hr />
+<h2 id="kết-luận">6. Kết luận</h2>
+<ul>
+<li>5 lỗi trong 1 phiên: <strong>4 lỗi cấu hình có chung gốc rễ là
+<code>sync-config.ps1</code></strong> (đã xoá), <strong>1 lỗi code
+extension chưa fix</strong> (ctx stale).</li>
+<li>Bài học: mọi thay đổi config phải <strong>cập nhật cả repo</strong>
+(repo = gương phản chiếu, không phải nguồn ép); không dùng placeholder
+tự đặt; mọi <code>ctx</code>/<code>events</code> capture trong extension
+phải guard sau reload.</li>
+<li>Việc còn lại: (a) Anh gõ <code>/reload</code> → xác nhận
+<code>MCP: 2/2 servers</code>; (b) fix Vụ 5 sau khi Anh duyệt; (c) log
+toàn bộ phát hiện vào KB (chờ meilin-brain connect lại).</li>
+</ul>
+<hr />
+<p><strong>Ghi ngày:</strong> 2026-08-11 23:20 · Người lập: MeiLin (Pi)
+· Người duyệt: SlncTrZ</p>
+</body>
+</html>
