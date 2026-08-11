@@ -1,6 +1,7 @@
 # AI Changelog
 
 ## 2026-06-16
+
 - **Complete Repo Sync — Added Missing Extensions & Skills**:
   - **Added** `extensions/conversation-saver/` — auto-save Pi conversation to Qdrant (MeiLin wing conversation), registers `save_conversation` tool
   - **Added** `extensions/ollama-provider/` — register Ollama provider for PC .171 (gemma4:e4B reasoning model)
@@ -13,11 +14,13 @@
   - **Verification:** All 7 extensions + 4 skills confirmed present in repo; npm install + pi install . ready
 
 ## 2026-06-13
+
 - **Documentation Verification — Voice Input Local Server Mode**:
   - Inconsistency: Root `README.md` described `voice-input` only as a Voxtral worker extension, while code also supports `workerProtocol=websocket` with a local ASR server at `ws://127.0.0.1:8765/ws` and health checks at `http://127.0.0.1:8765/health`.
   - Documentation updates applied: Updated root `README.md` and `extensions/voice-input/README.md` to document the local WebSocket ASR server mode, endpoint expectations, ownership split, message protocol, and health/startup behavior.
 
 ## 2026-06-12
+
 - **pi-emote — Import Emote Zip**:
   - Added an `/emote import` flow and interactive menu option that opens a folder-picker style selector for `.zip` emote sets.
   - Added zip validation and extraction into the user emote directory, with an overwrite confirmation when the imported set name already exists.
@@ -25,6 +28,7 @@
   - Validation: targeted TypeScript check for pi-emote passed; importer smoke test imported a 19-file emote zip, detected existing-set conflict, and overwrote when requested. Full repository `tsc` remains blocked by pre-existing unrelated `pi-mcp-adapter` test/type issues.
 
 ## 2026-06-06
+
 - **Voice Input — New Session Wake Gate Fix**:
   - Fixed stale always-listening state after `/new` by resetting the local wake gate and sending `reset_wake` when an active listening session is carried into a new Pi session.
   - Updated the Python worker `reset_wake` control path to clear active streams and buffered speech so stale awake audio cannot flush into the new session.
@@ -65,6 +69,7 @@
   - Bumped `pi-voice-worker` from `0.1.6` to `0.1.7` to invalidate `uvx` cache for the new watchdog code.
 
 ## 2026-06-01
+
 - **Voice Input Extension**:
   - Added `extensions/voice-input/` as a Pi extension with `/voice` tree menu, direct subcommands, and `f8` listening shortcut.
   - Added non-blocking worker lifecycle management, optional session auto-launch, ffmpeg-based TypeScript microphone capture, and local socket streaming to an isolated Python worker.
@@ -98,38 +103,20 @@
   - Capped summary generation requests to a small token budget instead of inheriting very large model max-token limits.
 
 ## 2026-05-31
+
 - **System Prompt Extension**:
   - Added `extensions/system-prompt/` as a standalone Pi extension with `/system-prompt` tree menu.
   - Added persisted mode/profile settings in `~/.pi/agent/system-prompt.json`.
   - Added append-only `validation-prompt` profile loaded from `extensions/system-prompt/prompts/validation-prompt.md` at startup/reload.
   - The validation profile instructs models to inspect source/docs before assuming APIs, validate implemented changes with command output or test results, use `local/` for temporary validation scripts, and report unverified work clearly.
   - Added extension README and updated the root README extension table/structure.
-- **Qwen Issues Log**:
-  - Created the global `C:\Users\jarod\QWEN_ISSUES.md` first-person issue log for recurring Qwen/local-agent annoyances.
-  - Moved the fake `YOUR_USERNAME` GitHub clone URL entry there and removed the repo-local `docs/DUMB_QWEN_THINGS.md` copy.
-- **Author Notes and Code Standards Updates**:
-  - Added repository identity to `docs/AUTHOR_NOTES.md`: this is Jarod's personal pi extensions repo used with his pi setup.
-  - Added parent-package/vendored-extension documentation rules to `docs/CODE_STANDARDS.md`, including accurate `JarodMica/jarods-pi-extensions` install context and avoiding placeholder/upstream install instructions as the primary path.
-  - Updated validation guidance to use `pi install .` from the repository root.
-  - Added a standard requiring each extension to maintain its own `README.md` for extension-specific usage/setup details while keeping the root README repository-focused.
-- **README.md Rewrite**: Overhauled root README to be useful for a new user cloning the repo on a different machine. Key changes:
-  - Added link to pi coding agent upstream
-  - Added prerequisites section (pi CLI, Node.js, optional Chafa for Windows emotes)
-  - Added `git clone https://github.com/JarodMica/jarods-pi-extensions.git` install instructions (was only local `./pi-extensions`)
-  - Added `/reload` mention after install
-  - Replaced inaccurate "Structure" section (claimed `skills/` and `prompts/` had content; they're empty `.gitkeep` placeholders) with an accurate tree diagram
-  - Added "Adding Your Own Extensions, Skills, or Prompts" section
-  - Added "Vendored Extensions" and "Upstream Sources" sections documenting the pi-emote and pi-mcp-adapter vendoring workflow
-  - Removed "Multi-Agent Checkpoint Workflow" section (internal dev process, not useful for end users)
-  - Kept the repo identity as "Jarod's Pi Extensions"
-  - Added Windows-specific setup guidance for the emote extension (Chafa + Windows Terminal requirement)
-  - Changed title from "My Pi Extensions" to "Jarod's Pi Extensions"
 - **README.md Slim Down and Extension README Audit**: Replaced detailed per-extension usage sections with a table linking to each extension's own README. Created `extensions/notification/README.md` so every extension has its own docs.
   - Consolidated emote extension docs to reference the vendored README for full details
   - Updated extension README install sections to describe parent-package installation from the repository root (`pi install .`) instead of placeholder clone URLs or upstream npm/git install commands
   - Updated MCP adapter setup notes to prefer `/mcp setup` for this vendored extension instead of the standalone npm CLI
 
 ## 2026-05-30
+
 - **TTS Output Summarization**:
   - Added "TTS Output" configuration with two modes: `verbose` (default, full output) and `shortened` (LLM-summarized before TTS).
   - `shortened` mode sends the response to a user-selected LLM model (chosen from models available via `/model`) as a separate API call.
@@ -160,6 +147,7 @@
   - Updated root `README.md` with MCP Adapter section and commands reference
 
 ## 2026-05-28
+
 - **Larger Image Emotes**:
   - Added `imageSize` config field to pi-emote for independent image/text grid sizing.
   - Image protocols (Kitty, Sixel, iTerm2) use `imageSize` for the sprite grid width.
@@ -218,6 +206,7 @@
     - Updated `extensions/pi-emote/README.md` custom-emote state comment to mark `success` as reserved/unused
 
 ## 2026-05-27
+
 - **pi-emote Terminal Image Documentation**:
   - Updated `extensions/pi-emote/README.md` to document Windows Terminal Sixel support through Chafa, including the `PI_EMOTE_CHAFA_PATH` override.
   - Documented VS Code integrated terminal image support as experimental: Kitty graphics can render docked sprites but currently shows grey/checkerboard placement artifacts, while the iTerm inline path causes cursor/layout drift.
@@ -236,6 +225,7 @@
   - Documented the new command in `README.md` and `extensions/pi-emote/README.md`.
 
 ## 2026-05-26
+
 - **Beep Timing Fix**:
   - Moved beep playback from `message_update` (mid-stream) to `message_end` so it fires at the same point as TTS — after the final narrative response is complete.
   - Removed dead `beepPlayedForAgent` and `activeAssistantMessageHasToolCall` tracking variables along with the `message_start`/`message_update` handlers they lived in.
@@ -254,6 +244,7 @@
   - Updated `docs/CONFIG.md`: added startup flag section, default values table, `tts-engine status` subcommand, clarified status command.
 
 ## 2026-05-24
+
 - **Documentation Update**:
   - Created `docs/CONFIG.md` detailing the `/notification` command options and settings.
   - Updated `README.md` with high-level usage and the `windows-native` engine option.
