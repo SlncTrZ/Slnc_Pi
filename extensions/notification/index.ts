@@ -60,6 +60,7 @@ type SummarizerSettings = {
 	provider?: string;
 	modelId?: string;
 	skipThreshold?: number;
+	baseUrl?: string;
 };
 
 type NotificationSettings = {
@@ -96,6 +97,8 @@ const DEFAULT_OMNIVOICE_BASE_URL = "http://192.168.1.171:8880/v1";
 const DEFAULT_OMNIVOICE_PROFILE = "Nu-01-Mai";
 const DEFAULT_TTS_OUTPUT_MODE: TtsOutputMode = "natural";
 const DEFAULT_SUMMARIZER_SKIP_THRESHOLD = 4;
+const LOCAL_SUMMARIZE_URL =
+	process.env.SUMMARIZE_URL || "http://192.168.1.227:8123/summarize";
 const VLLM_OMNI_SAMPLE_RATE = 44100;
 const FISH_STREAM_SAMPLE_RATE = 44100;
 const TTS_OUTPUT_MODES = ["verbose", "natural", "shortened"] as const;
@@ -166,6 +169,8 @@ function defaultSettings(): Required<
 		},
 		ttsOutputMode: DEFAULT_TTS_OUTPUT_MODE,
 		summarizer: {
+			provider: "local",
+			baseUrl: LOCAL_SUMMARIZE_URL,
 			skipThreshold: DEFAULT_SUMMARIZER_SKIP_THRESHOLD,
 		},
 	};
@@ -1789,6 +1794,24 @@ async function summarizeCodexText(
 }
 
 /**
+ * Gọi Summarize API local (.227:8123) — qwen3-summarize (0.6B, temp=0.1) — đỡ tốn Deepseek.
+ */
+async function summarizeLocalText(
+	text: string,
+	baseUrl: string,
+): Promise<string | null> {
+	const response = await fetch(baseUrl, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ text, max_sentences: 5 }),
+		signal: AbortSignal.timeout(60_000),
+	});
+	if (!response.ok) return null;
+	const data = (await response.json()) as { summary?: string };
+	return data.summary?.trim() || null;
+}
+
+/**
  * Send text to an LLM for summarization. Returns the summary string on success,
  * or null on failure (error is shown via ctx.ui.notify).
  */
@@ -1800,6 +1823,21 @@ async function summarizeText(
 	maxTokensOverride?: number,
 ): Promise<string | null> {
 	const summarizer = settings.summarizer;
+
+	// Provider "local" → Summarize API (.227, qwen3-summarize) — đỡ tốn Deepseek.
+	if (summarizer?.provider === "local") {
+		try {
+			const localSummary = await summarizeLocalText(
+				text,
+				summarizer.baseUrl || LOCAL_SUMMARIZE_URL,
+			);
+			if (localSummary) return localSummary;
+		} catch (error) {
+			notifyFailure(ctx, `Local summarizer failed: ${formatError(error)}`);
+		}
+		return null;
+	}
+
 	// "pi" (hoặc không cấu hình) → dùng model hiện tại của Pi session.
 	const useCurrentPiModel =
 		!summarizer?.provider || summarizer.provider === "pi";
