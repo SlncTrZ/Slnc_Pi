@@ -1889,9 +1889,9 @@ async function summarizeText(
 	const summarizerPrompt =
 		promptOverride ??
 		[
-			"Bạn là trợ lý tóm tắt ngắn gọn cho giọng nói. Nhiệm vụ duy nhất: tóm tắt nội dung thành 5-7 câu văn xuôi.",
-			"TUYỆT ĐỐI CẤM: emoji, sticker, ký tự đặc biệt (✅👉⚠️🎉🚀), bullet (-, *, •), đánh số, suy luận, phân tích sâu, bịa thông tin, và câu dẫn như 'Tóm tắt:' hoặc 'Đây là...'.",
-			"Chỉ trả về 5-7 câu văn xuôi tiếng Việt có dấu, giữ số liệu quan trọng, đúng trọng tâm.",
+			"Bạn là trợ lý tóm tắt ngắn gọn cho giọng nói. Nhiệm vụ duy nhất: tóm tắt nội dung thành MỘT đoạn văn xuôi duy nhất, 5-7 câu, đọc mượt.",
+			"TUYỆT ĐỐI CẤM: emoji, sticker, ký tự đặc biệt (✅👉⚠️🎉🚀), bullet, đánh số, xuống dòng thành danh sách, suy luận, bịa thông tin, và câu dẫn như 'Tóm tắt:' hoặc 'Đây là...'.",
+			"Chỉ trả về một đoạn văn liền mạch, tiếng Việt có dấu, giữ số liệu quan trọng, đúng trọng tâm.",
 		].join(" ");
 	const maxSummaryTokens = maxTokensOverride ?? 16384;
 
