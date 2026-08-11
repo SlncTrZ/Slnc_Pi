@@ -1065,7 +1065,7 @@ export default function voiceInputExtension(pi: ExtensionAPI) {
 		stopListening();
 		worker.disconnect();
 		await new Promise<void>((resolve, reject) => {
-			const script = `Get-CimInstance Win32_Process | Where-Object { ($_.Name -match '^(python|uv|uvx)') -and ($_.CommandLine -like '*pi-voice-worker*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`;
+			const script = `Get-CimInstance Win32_Process | Where-Object { ($_.Name -match '^(python|uv|uvx)') -and ($_.CommandLine -like '*sherpa_worker.py*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`;
 			execFile(
 				"powershell.exe",
 				[

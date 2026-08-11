@@ -208,15 +208,14 @@ export class VoiceWorkerClient {
     }
   }
 
-  private resolveWorkerCommand(): string[] {
-    if (this.options.workerCommand.length) return this.options.workerCommand;
-    if (this.isWebSocketProtocol()) throw new Error("workerCommand is required to auto-launch a WebSocket/Nemotron server");
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const workerDir = join(__dirname, "worker");
-    const script = join(workerDir, "voice_worker.py");
-    if (!existsSync(script)) throw new Error(`worker script missing: ${script}`);
-    return ["uvx", "--refresh", "--from", workerDir, "pi-voice-worker"];
-  }
+      private resolveWorkerCommand(): string[] {
+        if (this.options.workerCommand.length) return this.options.workerCommand;
+        if (this.isWebSocketProtocol())
+          throw new Error("workerCommand is required to auto-launch a WebSocket/Nemotron server");
+        throw new Error(
+          "tcp-jsonl (Voxtral) worker đã bị gỡ — dùng websocket (sherpa_worker.py) hoặc tự cấu hình workerCommand",
+        );
+      }
 
   private installSocketHandlers(socket: Socket): void {
     socket.on("data", (data) => {
