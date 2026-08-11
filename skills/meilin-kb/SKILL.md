@@ -5,12 +5,28 @@ description: >
   cyberbrain_knowledge + cyberbrain_episodic). Dùng để lưu trữ (knowledge_store),
   tra cứu (knowledge_search), conversation memory, và Post-Action logging.
   BẮT BUỘC khi làm việc với knowledge base, server .227, hoặc cần memory recall.
+  ⚠️ CHUẨN: dùng MCP tools server meilin-brain (meilin_brain_knowledge_store /
+  _knowledge_search / _ai_memory_read / _conversation_save / _conversation_recall) —
+  KHÔNG viết node script / fetch REST thủ công.
 allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 ---
 
-# MeiLin Cyber Brain — Qdrant REST API + Ollama Embedding
+# MeiLin Cyber Brain — MCP-FIRST (meilin-brain) · REST reference bên dưới
 
-> ⚠️ **Luật vàng:** Không gửi payload trần thiếu vector. Embedding trước, upsert sau.
+> ⚠️ **LUẬT VÀNG (bắt buộc):** Mọi thao tác KB dùng **MCP tools server `meilin-brain`** — đã có sẵn, tự xử lý embedding + upsert. **KHÔNG viết node script / `node -e` / fetch Qdrant REST thủ công** (gây lỗi escaping + phức tạp không cần thiết).
+
+### MCP TOOLS — BẢNG ÁNH XẠ (dùng CÁI NÀY trước)
+
+| Mục đích | MCP tool (server meilin-brain) | Ghi chú |
+| ---------- | ------------------------------ | ------- |
+| Lưu tri thức / action log | `meilin_brain_knowledge_store` | Schema: `{content, wing, topic, entity_name, entity_type, importance, change_reason}` — `wing` = code\|ops\|hardware\|research |
+| Tìm kiếm ngữ nghĩa (kỹ thuật) | `meilin_brain_knowledge_search` | query 3-5 keywords; score ≥ 0.7 cho wiki-first |
+| Đọc ký ức AI | `meilin_brain_ai_memory_read` | ký ức phiên / conversation |
+| Lưu hội thoại | `meilin_brain_conversation_save` | vào `cyberbrain_episodic` |
+| Tra hội thoại | `meilin_brain_conversation_recall` | semantic search hội thoại |
+| Timeline entity | `meilin_brain_knowledge_timeline` | xem lịch sử tiến hóa |
+
+> 📌 Các phần bên dưới (REST API + embedding thủ công) chỉ là **tài liệu tham khảo cấp thấp** — dùng khi MCP không có sẵn / cần debug trực tiếp. Vận hành bình thường: **MCP-first**.
 
 ---
 
@@ -61,7 +77,10 @@ allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 
 ---
 
-## 2. Embedding Protocol (BẮT BUỘC)
+## 2. Embedding Protocol (REFERENCE — MCP đã xử lý sẵn)
+
+> ✅ Khi dùng MCP (`meilin_brain_knowledge_store` / `_search`): embedding tự động — KHÔNG cần tự gọi Ollama.
+> Chỉ cần tự gọi khi debug trực tiếp REST:
 
 Mọi thao tác với Qdrant PHẢI qua embedding. Dùng Node.js để tránh lỗi shell escaping:
 
@@ -281,29 +300,23 @@ async function aiMemoryRead(query) {
 
 ---
 
-## 5. Post-Action Log Protocol (BẮT BUỘC)
+## 5. Post-Action Log Protocol (DÙNG MCP)
 
-> **Rule từ AGENTS.md:** Sau mỗi thay đổi code/file → gọi `knowledge_store` log chi tiết (file, diff, logic).
+> **Rule từ AGENTS.md:** Sau mỗi thay đổi code/file → gọi MCP `meilin_brain_knowledge_store` log chi tiết (file, diff, logic) — KHÔNG viết script thủ công.
 
-Mỗi khi em thực hiện thay đổi (edit/write file), PHẢI chạy:
-
-```javascript
-await knowledgeStore({
-  content: `[Pi Action Log] Modified file: ${filePath}
-Diff/Summary: ${briefWhatChanged}
-Reason: ${whyItChanged}
-Project: ${projectName}`,
-  domain: 'code',           // hoặc 'ops' nếu là deploy/server
-  project: projectName,
-  source: filePath,
-  topic: 'code_evolution',
-  entity_name: `pi-action-${Date.now()}`,
-  entity_type: 'technical_note',
-  change_reason: `Pi action: ${briefDescription}`
-});
+```
+meilin_brain_knowledge_store({
+  content: "[Pi Action Log] Modified file: <file>\nDiff/Summary: ...\nReason: ...\nProject: ...",
+  wing: "code",            // hoặc "ops" nếu deploy/server
+  topic: "code_evolution", // hoặc "docker_config" khi deploy .227
+  entity_name: "pi-action-...",
+  entity_type: "technical_note",
+  importance: "high",
+  change_reason: "Pi action: ..."
+})
 ```
 
-**Khi deploy server .227:** lưu vào `domain: 'ops'`, `topic: 'docker_config'`.
+**Khi deploy server .227:** wing `ops`, topic `docker_config`.
 
 ---
 
