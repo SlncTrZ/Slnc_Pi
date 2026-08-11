@@ -99,6 +99,52 @@ const DEFAULT_TTS_OUTPUT_MODE: TtsOutputMode = "natural";
 const DEFAULT_SUMMARIZER_SKIP_THRESHOLD = 4;
 const LOCAL_SUMMARIZE_URL =
 	process.env.SUMMARIZE_URL || "http://192.168.1.227:8123/summarize";
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.171:11434";
+
+// Cache danh sách model Ollama local (.227) — chỉ giữ model chat (bỏ nomic-embed)
+let ollamaModelCache: Array<{ id: string; label: string }> | null = null;
+
+async function refreshOllamaModels(): Promise<void> {
+	try {
+		const resp = await fetch(`${OLLAMA_URL}/api/tags`, {
+			signal: AbortSignal.timeout(10_000),
+		});
+		if (!resp.ok) return;
+		const data = (await resp.json()) as {
+			models?: Array<{ name?: string }>;
+		};
+		ollamaModelCache = (data.models ?? [])
+			.map((m) => m.name ?? "")
+			.filter((name) => name && !name.includes("nomic-embed"))
+			.map((name) => ({ id: name, label: `ollama:${name}` }));
+	} catch {
+		// fail im lặng — menu sẽ hiển thị placeholder
+	}
+}
+
+/**
+ * Gọi model Ollama local trên .227 (qwen3:0.6b, qwen2.5-coder...) — đỡ tốn Deepseek.
+ */
+async function summarizeOllamaText(
+	text: string,
+	modelId: string,
+	summarizerPrompt: string,
+): Promise<string | null> {
+	const resp = await fetch(`${OLLAMA_URL}/api/generate`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			model: modelId,
+			prompt: `${summarizerPrompt}\n\n${text}`,
+			stream: false,
+			options: { temperature: 0.1, num_predict: 600 },
+		}),
+		signal: AbortSignal.timeout(120_000),
+	});
+	if (!resp.ok) return null;
+	const data = (await resp.json()) as { response?: string };
+	return data.response?.trim() || null;
+}
 const VLLM_OMNI_SAMPLE_RATE = 44100;
 const FISH_STREAM_SAMPLE_RATE = 44100;
 const TTS_OUTPUT_MODES = ["verbose", "natural", "shortened"] as const;
@@ -1823,6 +1869,16 @@ async function summarizeText(
 	maxTokensOverride?: number,
 ): Promise<string | null> {
 	const summarizer = settings.summarizer;
+	const summarizerPrompt =
+		promptOverride ??
+		[
+			"You are a text-to-speech summarizer. Your job is to convert verbose assistant outputs into concise spoken summaries.",
+			"Summarize the following assistant response as a concise spoken summary, focusing on what was accomplished and key outcomes.",
+			"If the response contains salient points, suggestions, ideas, or important reasoning, make sure to preserve those details and the reasoning behind them.",
+			"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
+			"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
+		].join(" ");
+	const maxSummaryTokens = maxTokensOverride ?? 16384;
 
 	// Provider "local" → Summarize API (.227, qwen3-summarize) — đỡ tốn Deepseek.
 	if (summarizer?.provider === "local") {
@@ -1834,6 +1890,21 @@ async function summarizeText(
 			if (localSummary) return localSummary;
 		} catch (error) {
 			notifyFailure(ctx, `Local summarizer failed: ${formatError(error)}`);
+		}
+		return null;
+	}
+
+	// Provider "ollama" → model local trên .171 (qwen3-vl, gemma4:e4b...) — đỡ tốn Deepseek.
+	if (summarizer?.provider === "ollama" && summarizer.modelId) {
+		try {
+			const ollamaSummary = await summarizeOllamaText(
+				text,
+				summarizer.modelId,
+				summarizerPrompt,
+			);
+			if (ollamaSummary) return ollamaSummary;
+		} catch (error) {
+			notifyFailure(ctx, `Ollama summarizer failed: ${formatError(error)}`);
 		}
 		return null;
 	}
@@ -1892,17 +1963,6 @@ async function summarizeText(
 			headers.Authorization = `Bearer ${auth.apiKey}`;
 		}
 	}
-
-	const summarizerPrompt =
-		promptOverride ??
-		[
-			"You are a text-to-speech summarizer. Your job is to convert verbose assistant outputs into concise spoken summaries.",
-			"Summarize the following assistant response as a concise spoken summary, focusing on what was accomplished and key outcomes.",
-			"If the response contains salient points, suggestions, ideas, or important reasoning, make sure to preserve those details and the reasoning behind them.",
-			"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
-			"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
-		].join(" ");
-	const maxSummaryTokens = maxTokensOverride ?? 16384;
 
 	if (model.api === "openai-codex-responses") {
 		try {
@@ -2167,6 +2227,7 @@ export default function notificationExtension(pi: ExtensionAPI) {
 	let forceNextAgentNotification = false;
 	const tts = new TtsQueue(() => settings);
 	tts.setEvents(pi.events);
+	void refreshOllamaModels(); // nạp sớm danh sách model Ollama local (.171) cho menu
 
 	pi.registerMessageRenderer(
 		SUMMARY_MESSAGE_TYPE,
@@ -2335,12 +2396,18 @@ export default function notificationExtension(pi: ExtensionAPI) {
 			settings.openAiCompatible?.voice ?? DEFAULT_OPENAI_COMPATIBLE_VOICE;
 		const currentOutputMode = settings.ttsOutputMode ?? DEFAULT_TTS_OUTPUT_MODE;
 		const summarizerModelLabel =
-			settings.summarizer?.provider === "pi" ||
-			(!settings.summarizer?.provider && !settings.summarizer?.modelId)
-				? "pi (current model)"
-				: settings.summarizer?.provider && settings.summarizer?.modelId
-					? `${settings.summarizer.provider}:${settings.summarizer.modelId}`
-					: "not set";
+			settings.summarizer?.provider === "local"
+				? "local (qwen3-summarize)"
+				: settings.summarizer?.provider === "ollama" &&
+						settings.summarizer?.modelId
+					? `ollama:${settings.summarizer.modelId}`
+					: settings.summarizer?.provider === "pi" ||
+							(!settings.summarizer?.provider &&
+								!settings.summarizer?.modelId)
+						? "pi (current model)"
+						: settings.summarizer?.provider && settings.summarizer?.modelId
+							? `${settings.summarizer.provider}:${settings.summarizer.modelId}`
+							: "not set";
 		const summarizerThreshold =
 			settings.summarizer?.skipThreshold ?? DEFAULT_SUMMARIZER_SKIP_THRESHOLD;
 
@@ -2577,38 +2644,42 @@ export default function notificationExtension(pi: ExtensionAPI) {
 						id: "summarizer:select-model",
 						label: `Select summarizer model  (${summarizerModelLabel})`,
 						children: () => {
-							const models =
-								getCurrentCtx()?.modelRegistry.getAvailable() ?? [];
+							const localSelected = settings.summarizer?.provider === "local";
+							const localOption = {
+								type: "action" as const,
+								id: "summarizer-model:local:",
+								label: `${localSelected ? "▸ " : ""}local — qwen3-summarize (.227)`,
+							};
 							const piSelected =
 								!settings.summarizer?.provider ||
 								settings.summarizer?.provider === "pi";
 							const piOption = {
 								type: "action" as const,
 								id: "summarizer-model:pi:",
-								label: `${piSelected ? "▸ " : ""}pi (current model)`,
+								label: `${piSelected ? "▸ " : ""}pi (current model — Deepseek)`,
 							};
-							if (models.length === 0)
+							const ollamaModels = ollamaModelCache ?? [];
+							const ollamaOptions = ollamaModels.map((m) => {
+								const selected =
+									settings.summarizer?.provider === "ollama" &&
+									settings.summarizer?.modelId === m.id;
+								return {
+									type: "action" as const,
+									id: `summarizer-model:ollama:${encodeURIComponent(m.id)}`,
+									label: `${selected ? "▸ " : ""}${m.label}`,
+								};
+							});
+							if (ollamaModels.length === 0)
 								return [
+									localOption,
 									piOption,
 									{
 										type: "action" as const,
 										id: "summarizer:no-models",
-										label: "No authenticated models available",
+										label: "Ollama local (.171) — đang tải / không truy cập được",
 									},
 								];
-							return [
-								piOption,
-								...models.map((m: any) => {
-									const selected =
-										settings.summarizer?.provider === m.provider &&
-										settings.summarizer?.modelId === m.id;
-									return {
-										type: "action" as const,
-										id: `summarizer-model:${encodeURIComponent(m.provider)}:${encodeURIComponent(m.id)}`,
-										label: `${selected ? "▸ " : ""}${m.provider}:${m.id} (${m.name})`,
-									};
-								}),
-							];
+							return [localOption, piOption, ...ollamaOptions];
 						},
 					},
 					{
@@ -3073,6 +3144,31 @@ $speak.Speak('${escapePowerShellSingleQuoted(text)}');`);
 				persistSettings(ctx);
 				if (ctx)
 					ctx.ui.notify("Summarizer will use the current Pi model", "info");
+				return;
+			}
+			if (provider === "local") {
+				settings.summarizer = {
+					...settings.summarizer,
+					provider: "local",
+					modelId: "",
+				};
+				persistSettings(ctx);
+				if (ctx)
+					ctx.ui.notify("Summarizer: qwen3-summarize local (.227)", "info");
+				return;
+			}
+			if (provider === "ollama") {
+				if (!modelId) {
+					if (ctx) ctx.ui.notify("Could not parse selected Ollama model.", "error");
+					return;
+				}
+				settings.summarizer = {
+					...settings.summarizer,
+					provider: "ollama",
+					modelId,
+				};
+				persistSettings(ctx);
+				if (ctx) ctx.ui.notify(`Summarizer: ollama ${modelId}`, "info");
 				return;
 			}
 			if (!modelId) {

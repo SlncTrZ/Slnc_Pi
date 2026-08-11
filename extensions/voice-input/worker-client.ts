@@ -1,9 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { createWriteStream, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import WebSocket from "ws";
 import type { VoiceSettings, WorkerProtocol } from "./settings";
 
