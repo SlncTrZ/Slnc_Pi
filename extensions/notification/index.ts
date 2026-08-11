@@ -1889,11 +1889,9 @@ async function summarizeText(
 	const summarizerPrompt =
 		promptOverride ??
 		[
-			"You are a text-to-speech summarizer. Your job is to convert verbose assistant outputs into concise spoken summaries.",
-			"Summarize the following assistant response as a concise spoken summary, focusing on what was accomplished and key outcomes.",
-			"If the response contains salient points, suggestions, ideas, or important reasoning, make sure to preserve those details and the reasoning behind them.",
-			"Omit code, file paths, tables, and technical details that don't read well aloud, but keep the substance of any recommendations or insights.",
-			"Keep it to 3-5 sentences maximum. Write in a natural, conversational tone suitable for speech.",
+			"Bạn là trợ lý tóm tắt ngắn gọn cho giọng nói. Nhiệm vụ duy nhất: tóm tắt nội dung thành 5-7 câu văn xuôi.",
+			"TUYỆT ĐỐI CẤM: emoji, sticker, ký tự đặc biệt (✅👉⚠️🎉🚀), bullet (-, *, •), đánh số, suy luận, phân tích sâu, bịa thông tin, và câu dẫn như 'Tóm tắt:' hoặc 'Đây là...'.",
+			"Chỉ trả về 5-7 câu văn xuôi tiếng Việt có dấu, giữ số liệu quan trọng, đúng trọng tâm.",
 		].join(" ");
 	const maxSummaryTokens = maxTokensOverride ?? 16384;
 
