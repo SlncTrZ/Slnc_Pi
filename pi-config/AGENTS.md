@@ -42,15 +42,15 @@ User: Trương Công Định (SlncTrZ)
 
 ## 4. GITHUB PROTOCOL
 
-### PRE-CHANGE: `git status` → `git pull origin main` → verify repo đúng
+### PRE-CHANGE: `git status` → `git pull origin master` → verify repo đúng
 
 ### REPO MAP (Updated 22/07/2026)
 
 Repo details: search Qdrant domain `ops` topic `repo_map`. Active deploy targets: docker-all, Pi_Core (.227), 9router (upstream decolua/9router), openclaw (ghcr image).
 
-### POST-CHANGE: `git add .` → `git commit -m "Fix/Feat/Refactor: msg"` → `git push origin main`
+### POST-CHANGE: `git add .` → `git commit -m "Fix/Feat/Refactor: msg"` → `git push origin master`
 
-### RULES: Branch `main` | No `.env`/secrets in commit | Valid `.gitignore`
+### RULES: Branch `master` | No `.env`/secrets in commit | Valid `.gitignore`
 
 ## 5. DEV WORKFLOW
 
