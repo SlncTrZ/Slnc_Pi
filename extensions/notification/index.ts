@@ -137,7 +137,7 @@ async function summarizeOllamaText(
 			model: modelId,
 			prompt: `${summarizerPrompt}\n\n${text}`,
 			stream: false,
-			options: { temperature: 0.1, num_predict: 600 },
+			options: { temperature: 0.1, num_predict: 600, think: false },
 		}),
 		signal: AbortSignal.timeout(120_000),
 	});
