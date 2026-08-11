@@ -69,6 +69,10 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "2.5/4 Cat .md sang reports-md/ (luu tru)..." -ForegroundColor Cyan
 ssh -o ConnectTimeout=10 $Server "mv -f $ComposeDir/reports/$mdName $ComposeDir/reports-md/ 2>/dev/null"
 
+# ─── Buoc 2.6: sinh lai index.html (card grid) ───────────────
+Write-Host "2.6/4 Sinh lai index.html (card grid)..." -ForegroundColor Cyan
+ssh -o ConnectTimeout=10 $Server "bash $ComposeDir/gen-index.sh"
+
 # ─── Buoc 3: keo .html ve local ────────────────────────────
 Write-Host "3/4 Keo .html ve local..." -ForegroundColor Cyan
 scp -o ConnectTimeout=8 "${Server}:$ComposeDir/reports/$htmlName" $htmlLocal
