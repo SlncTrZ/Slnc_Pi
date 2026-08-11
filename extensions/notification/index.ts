@@ -183,8 +183,13 @@ function notifyFailure(
 	ctx: ExtensionContext | undefined,
 	message: string,
 ): void {
-	if (ctx?.hasUI) {
-		ctx.ui.notify(message, "error");
+	const target = ctx ?? getCurrentCtx();
+	try {
+		if (target?.hasUI) {
+			target.ui.notify(message, "error");
+		}
+	} catch {
+		// ctx stale (sau reload/newSession/fork/switchSession) — chỉ log console
 	}
 	console.error(`[notification] ${message}`);
 }
