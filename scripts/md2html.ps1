@@ -35,7 +35,7 @@ $mdDir    = [System.IO.Path]::GetDirectoryName($mdFull)
 # ─── Theme CSS (docs/themes/) — de trong = random 1 trong 3 ──
 $repoRoot = Split-Path -Parent $PSScriptRoot                                # scripts/ -> repo root
 $themeDir = Join-Path $repoRoot 'docs\themes'
-$themeList = @('pandoc-report.css', 'theme-neon.css', 'theme-paper.css')
+$themeList = @('theme-github-dark.css', 'pandoc-report.css', 'theme-neon.css', 'theme-paper.css')
 if ([string]::IsNullOrWhiteSpace($Theme)) {
     $Theme = $themeList | Get-Random
     Write-Host "Theme ngau nhien: $Theme" -ForegroundColor Magenta
