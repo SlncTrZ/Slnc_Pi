@@ -19,3 +19,8 @@ pi-config/models-store.json
 pi-config/mcp-cache.json
 *.pyc
 __pycache__/
+
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/

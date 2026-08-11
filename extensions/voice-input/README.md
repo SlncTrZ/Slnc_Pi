@@ -9,7 +9,7 @@ Supported worker protocols:
 
 ## Install
 
-This extension is part of **[Jarod's Pi Extensions](../../README.md)** and is installed by the parent package. From the repository root:
+This extension is part of **[Slnc_Pi](../../README.md)** and is installed by the parent package. From the repository root:
 
 ```bash
 npm install

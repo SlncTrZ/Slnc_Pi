@@ -17,9 +17,6 @@
     "skills": [
       "./skills"
     ],
-    "prompts": [
-      "./prompts"
-    ],
     "extensions": [
       "./extensions"
     ]

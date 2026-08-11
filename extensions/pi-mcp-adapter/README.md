@@ -18,7 +18,7 @@ But the MCP ecosystem has useful stuff - databases, browsers, APIs. This adapter
 
 ## Install
 
-This extension is vendored inside **[Jarod's Pi Extensions](../../README.md)** and is installed by the parent package. From the repository root:
+This extension is vendored from **[JarodMica/jarods-pi-extensions](https://github.com/JarodMica/jarods-pi-extensions)** (upstream); installed via **Slnc_Pi**. From the repository root:
 
 ```bash
 npm install

@@ -337,7 +337,7 @@ const serverInfo = await knowledgeSearch({
 
 Quick reference từ kết quả:
 
-- **Server .227**: i5-8250U/8GB/163GB | Ubuntu 24.04 | 18 containers | `/home/dinhtc/docker-all/`
+- **Server .227**: i5-8250U/8GB/163GB | Ubuntu 24.04 | 3 containers (pi-core/ollama/qdrant) | `/home/dinhtc/docker-all/`
 - **PC .171**: Ollama server | models: nomic-embed-text, gemma4:e2b, qwen3-vl:2b-thinking
 - **Local**: `H:\Develop` (Windows 11)
 - **Networks**: `docker_network` (services) | `deer-flow` (AI: qdrant+ollama) | Cloudflare Tunnel `*.truongcongdinh.org`
