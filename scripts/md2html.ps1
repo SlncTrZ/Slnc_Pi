@@ -65,6 +65,10 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# ─── Buoc 2.5: cat .md sang reports-md/ (luu tru, KHONG len web) ──
+Write-Host "2.5/4 Cat .md sang reports-md/ (luu tru)..." -ForegroundColor Cyan
+ssh -o ConnectTimeout=10 $Server "mv -f $ComposeDir/reports/$mdName $ComposeDir/reports-md/ 2>/dev/null"
+
 # ─── Buoc 3: keo .html ve local ────────────────────────────
 Write-Host "3/4 Keo .html ve local..." -ForegroundColor Cyan
 scp -o ConnectTimeout=8 "${Server}:$ComposeDir/reports/$htmlName" $htmlLocal
