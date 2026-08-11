@@ -1,0 +1,257 @@
+/* ============================================================
+   theme-neon.css — Theme #2: Dark Neon (tím-cyan, nền tối sâu)
+   Wing: code | Topic: research_report | Updated: 2026-08-12
+   Dùng với: pandoc -s --toc --embed-resources --standalone --syntax-highlighting=tango
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  --accent: #a78bfa;          /* tím nhạt */
+  --accent-strong: #22d3ee;   /* cyan */
+  --accent-soft: rgba(167, 139, 250, 0.1);
+
+  --bg: #0a0e1a;
+  --fg: #e4e8f0;
+  --muted: #8b93a7;
+  --border: #232a3d;
+  --code-bg: #161c2e;
+  --code-fg: #dbe4ff;
+  --pre-bg: #05070f;
+  --pre-fg: #c9d1e6;
+  --table-stripe: #0e1424;
+  --table-hover: rgba(139, 92, 246, 0.08);
+  --quote-bg: #0e1424;
+}
+
+/* ---------- Layout ---------- */
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(139, 92, 246, 0.12), transparent 60%),
+    radial-gradient(1000px 400px at 10% 110%, rgba(34, 211, 238, 0.08), transparent 60%),
+    var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+/* ---------- Header / metadata ---------- */
+header#title-block-header {
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 12px 24px -20px rgba(139, 92, 246, 0.6);
+}
+
+h1.title {
+  font-size: 2.1rem;
+  line-height: 1.25;
+  margin: 0 0 0.75rem;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.02em;
+}
+
+p.subtitle { font-size: 1.15rem; color: var(--muted); margin: 0 0 1rem; }
+
+p.author, p.date {
+  display: inline-block;
+  font-size: 0.9rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.9rem;
+  margin: 0 0.5rem 0.25rem 0;
+}
+
+/* ---------- Headings ---------- */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--fg);
+  line-height: 1.3;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: 1.9rem; }
+h2 {
+  font-size: 1.45rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+h2::before {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 0.9em;
+  margin-right: 0.5rem;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  vertical-align: -0.08em;
+}
+h3 { font-size: 1.2rem; }
+h3::before { content: "◆ "; color: var(--accent); }
+h4 { font-size: 1.05rem; }
+h5 { font-size: 0.95rem; }
+h6 { font-size: 0.9rem; color: var(--muted); }
+
+/* ---------- Inline & text ---------- */
+p { margin: 0.75rem 0; }
+
+a {
+  color: var(--accent-strong);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+a:hover { border-bottom-color: currentColor; text-shadow: 0 0 12px rgba(34, 211, 238, 0.4); }
+
+strong { font-weight: 650; color: #f0f4ff; }
+
+hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-strong), transparent);
+  margin: 2.5rem 0;
+}
+
+ul, ol { padding-left: 1.5rem; margin: 0.75rem 0; }
+li { margin: 0.3rem 0; }
+
+/* ---------- Code ---------- */
+code {
+  font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--code-bg);
+  color: var(--accent-strong);
+  border-radius: 5px;
+  padding: 0.15em 0.4em;
+}
+
+pre {
+  background: var(--pre-bg);
+  color: var(--pre-fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 1rem 0;
+  box-shadow: 0 0 24px -12px rgba(139, 92, 246, 0.5);
+}
+
+pre code { background: transparent; color: inherit; padding: 0; font-size: inherit; }
+
+div.sourceCode pre, pre.sourceCode {
+  background: var(--pre-bg) !important;
+  color: var(--pre-fg);
+}
+div.sourceCode { margin: 1rem 0; }
+
+/* ---------- Tables ---------- */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.25rem 0;
+  font-size: 0.95rem;
+  display: block;
+  overflow-x: auto;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 0.55rem 0.85rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: linear-gradient(180deg, var(--accent-soft), transparent);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+tbody tr:nth-child(even) { background: var(--table-stripe); }
+tbody tr:hover { background: var(--table-hover); }
+
+/* ---------- Blockquote ---------- */
+blockquote {
+  margin: 1.25rem 0;
+  padding: 0.9rem 1.25rem;
+  background: var(--quote-bg);
+  border-left: 4px solid transparent;
+  border-image: linear-gradient(180deg, var(--accent), var(--accent-strong)) 1;
+  border-radius: 0 8px 8px 0;
+}
+blockquote p { margin: 0.4rem 0; }
+blockquote p:first-child { margin-top: 0; }
+blockquote p:last-child { margin-bottom: 0; }
+
+/* ---------- TOC ---------- */
+nav#TOC {
+  background: var(--quote-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.4rem;
+  margin: 1.5rem 0 2.25rem;
+}
+
+nav#TOC > ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5rem 0 0;
+  columns: 2;
+  column-gap: 2rem;
+}
+
+nav#TOC ul ul { list-style: none; padding-left: 1.1rem; margin: 0.1rem 0; }
+
+nav#TOC a {
+  display: block;
+  padding: 0.15rem 0;
+  border-bottom: none;
+  font-size: 0.92rem;
+  color: var(--fg);
+}
+nav#TOC a:hover { color: var(--accent-strong); }
+
+nav#TOC::before {
+  content: "⚡ Mục lục";
+  display: block;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+@media (max-width: 640px) { nav#TOC > ul { columns: 1; } }
+
+/* ---------- Misc ---------- */
+img { max-width: 100%; height: auto; border-radius: 10px; }
+mark { background: rgba(167, 139, 250, 0.3); color: #fff; padding: 0 0.2em; }
+kbd {
+  font-family: inherit;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 0.1em 0.45em;
+  font-size: 0.85em;
+}
+
+@media print {
+  body { background: none; max-width: none; padding: 1rem; }
+  nav#TOC { display: none; }
+  a { color: inherit; }
+}
