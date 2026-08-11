@@ -9,7 +9,7 @@ User: Trương Công Định (SlncTrZ)
 
 1. **Tier 1 (Ground Truth):** `list_files` + `read_file` → nếu đủ info, SKIP RAG
 2. **Tier 2 (Context):** New task → Skip RAG | Related/Debug task → Tier 3
-3. **Tier 3 (RAG):** Load skill `/skill:meilin-kb` → dùng `knowledgeSearch`(kỹ thuật) / `aiMemoryRead`(ký ức). Query: 3-5 keywords.
+3. **Tier 3 (RAG):** Load skill `/skill:meilin-kb` → dùng `meilin_brain_knowledge_search` (kỹ thuật) / `meilin_brain_ai_memory_read` (ký ức). Query: 3-5 keywords.
 
 **NO CONFIRMATION, NO WRITE:** Chỉ `write_to_file` / `edit` sau user gõ "Proceed".
 
@@ -18,7 +18,7 @@ User: Trương Công Định (SlncTrZ)
 **Khi làm việc liên quan server .227, docker, deployment → PHẢI load skill `/skill:meilin-kb` rồi đọc Qdrant trước:**
 
 - Collection: `cyberbrain_knowledge` (domain `ops`) — 2 collection duy nhất: `cyberbrain_knowledge` + `cyberbrain_episodic`
-- Dùng `knowledgeSearch` query `"server infrastructure overview"` domain `ops`
+- Dùng `meilin_brain_knowledge_search` query `"server infrastructure overview"` domain `ops`
 - Chứa: hardware specs, container list, ports, networks, .171 info
 
 **Quick Reference:**
@@ -29,16 +29,15 @@ User: Trương Công Định (SlncTrZ)
 
 ## 3. POST-ACTION
 
-- Sau mỗi thay đổi → load `/skill:meilin-kb` → gọi `knowledgeStore` log chi tiết (file, diff, logic) vào `cyberbrain_knowledge` (domain phù hợp: code/ops/hardware/research)
-- Cuối mỗi session Pi → auto-save conversation summary vào `cyberbrain_episodic`
+- Sau mỗi thay đổi → log KB bằng **MCP tool `meilin_brain_knowledge_store`** (server meilin-brain) vào `cyberbrain_knowledge` (domain phù hợp: code/ops/hardware/research).
+- Cuối mỗi session Pi → `meilin_brain_conversation_save` auto-save summary vào `cyberbrain_episodic`.
+- ⚠️ **KHÔNG viết node script / node -e / fetch Qdrant REST thủ công để log KB** — MCP tools đã có sẵn (viết script gây lỗi escaping + phức tạp không cần thiết).
 
-### QDRANT EMBEDDING PROTOCOL
+### QDRANT TRUY CẬP (QUA MCP — BẮT BUỘC)
 
-1. Gọi Ollama `.227` `nomic-embed-text:latest` tạo embedding
-2. Upsert Qdrant `.227:6333` (payload + vector 768d)
-3. Verify `indexed_vectors_count`. Nếu `points_count < 100` → hạ threshold xuống 1
-
-- **Không gửi payload trần thiếu vector**
+- **Lưu:** `meilin_brain_knowledge_store` {content, domain, project, source, topic, entity_name, importance} — MCP tự tạo embedding + upsert (768d).
+- **Tra cứu:** `meilin_brain_knowledge_search` (tri thức) | `meilin_brain_ai_memory_read` (ký ức) | `meilin_brain_conversation_recall` (hội thoại).
+- **Không gửi payload trần thiếu vector** — luôn đi qua MCP server (embedding xử lý sẵn).
 
 ## 4. GITHUB PROTOCOL
 
@@ -57,7 +56,7 @@ Repo details: search Qdrant domain `ops` topic `repo_map`. Active deploy targets
 1. **Reuse First:** Tìm logic tương tự trong codebase trước khi viết mới (Anti-YAGNI)
 2. **TDD:** Test → Fail → Code → Pass → Refactor
 3. **Security:** No hardcoded keys. Validate inputs (XSS/CSRF/Injection). No sensitive data in errors
-4. **Wiki-First khi Search Web (BẮT BUỘC):** Khi Anh yêu cầu nghiên cứu/search thông tin → đầu tiên `knowledgeSearch` domain `research` (score ≥ 0.7) → nếu có → trả lời trực tiếp, không web search. Nếu không có → `web_search` → tổng hợp → trả lời → lưu vào `cyberbrain_knowledge` domain `research` (extension `web-wiki-saver` tự lưu, hoặc gọi `save_web_to_wiki` thủ công). Chi tiết: skill meilin-kb Section 8.
+4. **Wiki-First khi Search Web (BẮT BUỘC):** Khi Anh yêu cầu nghiên cứu/search thông tin → đầu tiên `meilin_brain_knowledge_search` domain `research` (score ≥ 0.7) → nếu có → trả lời trực tiếp, không web search. Nếu không có → `web_search` → tổng hợp → trả lời → lưu vào `cyberbrain_knowledge` domain `research` (extension `web-wiki-saver` tự lưu, hoặc gọi `save_web_to_wiki` thủ công). Chi tiết: skill meilin-kb Section 8.
 
 ### Quy tắc 3 lần: Nếu 1 lỗi sửa quá 3 lần không xong → phải xin phép Anh để gọi agent nhóm hỗ trợ ngay. Không tự mày mò lòng vòng
 
@@ -81,3 +80,30 @@ Repo details: search Qdrant domain `ops` topic `repo_map`. Active deploy targets
 - **Networks:** `docker_network` (services) | `deer-flow` (AI: qdrant+ollama) | Cloudflare Tunnel `*.truongcongdinh.org`
 - **Workflow:** Code local → Build → `cd /home/dinhtc/docker-all/ && docker compose up -d [service]`
 - **Security:** Secrets in `.env` `chmod 600` | No hardcoded keys
+
+## 8. QUY TRÌNH NGHIÊN CỨU (RESEARCH-FIRST) ⭐
+
+### Nguyên tắc Researcher (BẮT BUỘC trước mọi thực thi lớn)
+
+1. **Research-first:** Nhiệm vụ/dự án mới → nghiên cứu trước, code sau. Không nhảy cóc.
+2. **Bằng chứng có link:** Mọi kết luận phải có nguồn (docs chính thức/benchmark/thực nghiệm). KHÔNG đoán.
+3. **Không vội code:** Chưa đủ hiểu → viết nghiên cứu + chốt quyết định (ADR/decision note) trước khi code.
+4. **Nghiệm thu đo được:** Kết quả cuối phải đo được (kết quả thực tế, không "hy vọng chạy").
+5. **Tầm nhìn dài:** Tự hỏi "10 năm nữa cái này có cản trở mình không?" (lock-in, bảo trì, chi phí).
+
+### Cách viết báo cáo nghiên cứu (file .md phải ĐẦY ĐỦ, không rút gọn)
+
+1. **Header:** Ngày lập · Loại (nghiên cứu/so sánh/nghiệm thu) · Phạm vi · Nguồn chính (link)
+2. **Executive Summary:** 3–5 bullet kết luận chính
+3. **Phân tích:** trả lời câu hỏi từng mục, mỗi kết luận kèm nguồn/link
+4. **So sánh:** bảng so sánh khi nhiều phương án (Ưu/Nhược)
+5. **Khuyến nghị:** chọn gì, vì sao → chốt ADR/quyết định
+6. **Kết luận + ghi ngày** (để tái kiểm tra khi cập nhật)
+
+### Luồng chuẩn
+
+Research → Chốt quyết định (ADR/decision) → Cập nhật roadmap/progress → Code → Nghiệm thu đo được → post-action log vào KB
+
+### Wiki-First kết hợp (nối mục 5.4)
+
+Nghiên cứu web xong → tổng hợp → trả lời → LƯU VÀO WIKI (Qdrant) để tái sử dụng; tra wiki trước khi web search.
