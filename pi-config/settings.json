@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.82.0",
+  "lastChangelogVersion": "0.84.1",
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-v4-flash",
   "defaultThinkingLevel": "high",
@@ -17,6 +17,7 @@
   ],
   "extensions": [],
   "theme": "dark",
+  "tuiMode": "fullscreen",
   "compaction": {
     "enabled": true,
     "reserveTokens": 8192,
@@ -32,5 +33,6 @@
     "deepseek/deepseek-v4-pro",
     "zai-coding-cn/glm-5.1",
     "zai-coding-cn/glm-5.2"
-  ]
+  ],
+  "fullscreenScrollbar": "always"
 }
