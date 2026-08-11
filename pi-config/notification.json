@@ -15,13 +15,14 @@
     "maxNewTokens": 256
   },
   "omnivoice": {
-    "baseUrl": "http://192.168.1.171:8880/v1",
+    "baseUrl": "http://127.0.0.1:8880/v1",
     "profile": "Nu-01-Mai"
   },
   "ttsOutputMode": "natural",
   "summarizer": {
+    "provider": "local",
+    "baseUrl": "http://192.168.1.227:8123/summarize",
     "skipThreshold": 4,
-    "provider": "deepseek",
-    "modelId": "deepseek-v4-flash"
+    "modelId": ""
   }
 }

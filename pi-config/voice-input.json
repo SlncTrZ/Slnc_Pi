@@ -10,9 +10,9 @@
   "audioDevice": "",
   "captureArgs": [],
   "workerProtocol": "websocket",
-"workerCommand": [
+  "workerCommand": [
     "python",
-    "{{PI_AGENT_DIR}}/git/github.com/SlncTrZ/Slnc_Pi/extensions/voice-input/worker/sherpa_worker.py"
+    "C:/Users/truon/.pi/agent/git/github.com/SlncTrZ/Slnc_Pi/extensions/voice-input/worker/sherpa_worker.py"
   ],
   "workerHost": "127.0.0.1",
   "workerPort": 8766,
@@ -20,5 +20,5 @@
   "websocketUrl": "ws://127.0.0.1:8766/ws",
   "stripLanguageTags": true,
   "appendSeparator": " ",
-  "logPath": "{{PI_AGENT_DIR}}/voice-input/voice-worker.log"
+  "logPath": "C:/Users/truon/.pi/agent/voice-input/voice-worker.log"
 }
