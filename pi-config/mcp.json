@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-        "pi-core": {
+    "pi-core": {
       "url": "http://192.168.1.227:3003/mcp",
       "auth": false,
       "lifecycle": "keep-alive"
