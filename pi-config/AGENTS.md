@@ -99,6 +99,7 @@ Repo details: search Qdrant domain `ops` topic `repo_map`. Active deploy targets
 4. **So sánh:** bảng so sánh khi nhiều phương án (Ưu/Nhược)
 5. **Khuyến nghị:** chọn gì, vì sao → chốt ADR/quyết định
 6. **Kết luận + ghi ngày** (để tái kiểm tra khi cập nhật)
+7. **Render HTML (BẮT BUỘC sau khi xong .md):** `\scripts\md2html.ps1 <file>.md` — Pandoc chạy Docker trên .227, kéo .html về local + mở Chrome. Báo cáo có KPI cards / charts / prompt cards → chèn **raw HTML components** theo `docs/report-components.md`, render với `-Theme theme-github-dark.css`. Mặc định không chỉ định theme = random 1 trong 4 (github-dark / pandoc-report / neon / paper).
 
 ### Luồng chuẩn
 

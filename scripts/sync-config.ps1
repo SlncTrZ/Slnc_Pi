@@ -7,8 +7,8 @@
 
 $ErrorActionPreference = 'Stop'
 
-$src = Join-Path $PSScriptRoot '..' 'pi-config'
-$dst = Join-Path $env:USERPROFILE '.pi' 'agent'
+$src = Join-Path (Join-Path $PSScriptRoot '..') 'pi-config'
+$dst = Join-Path (Join-Path $env:USERPROFILE '.pi') 'agent'
 
 # ─── Đảm bảo thư mục đích tồn tại ─────────────────────────
 if (-not (Test-Path $dst)) {
