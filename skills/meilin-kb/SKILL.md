@@ -337,10 +337,11 @@ const serverInfo = await knowledgeSearch({
 
 Quick reference từ kết quả:
 
-- **Server .227**: i5-8250U/8GB/163GB | Ubuntu 24.04 | 3 containers (pi-core/ollama/qdrant) | `/home/dinhtc/docker-all/`
-- **PC .171**: Ollama server | models: nomic-embed-text, gemma4:e2b, qwen3-vl:2b-thinking
-- **Local**: `H:\Develop` (Windows 11)
-- **Networks**: `docker_network` (services) | `deer-flow` (AI: qdrant+ollama) | Cloudflare Tunnel `*.truongcongdinh.org`
+> ⚠️ **SỐ LIỆU CHI TIẾT ĐỌC TỪ POINT `device-inventory`** (topic `device_inventory`, domain `ops`) — đã VERIFIED thực tế 2026-08-13 (9 containers trên .227, 5 models Ollama trên .171, gemma4:e4b chứ KHÔNG phải e2b). KHÔNG tin số liệu cũ ghi trong file này.
+
+- **PC .171** = Windows 11 Pro — máy làm việc (agent chạy tại đây), Ollama bind 192.168.1.171:11434, Omnivoice :8880, H:\Develop
+- **Server .227** = Ubuntu 24.04.4 LTS — Docker 9 services: qdrant :6333, ollama :11434, pi-core :3003, n8n :5678, 9router :20128, headroom :8787, file-storage :8085, cloudflared, nginx-reports (qua cloudflared, không map host)
+- **Networks**: `docker_network` | `docker-all_default` | Cloudflare Tunnel `*.truongcongdinh.org`
 
 ---
 
