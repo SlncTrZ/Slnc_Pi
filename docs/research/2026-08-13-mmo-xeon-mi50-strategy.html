@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>2026-08-13-mmo-xeon-mi50-strategy</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">
+:root {
+color-scheme: light;
+--accent: #2563eb; 
+--accent-strong: #1d4ed8;
+--accent-soft: rgba(37, 99, 235, 0.06);
+--bg: #fdfdfb;
+--fg: #33302c;
+--muted: #7d7a72;
+--border: #e8e5dd;
+--code-bg: #f4f2ec;
+--code-fg: #7c2d12;
+--pre-bg: #faf9f5;
+--pre-fg: #3d3a34;
+--table-stripe: #f8f7f2;
+--table-hover: #f1f6fe;
+--quote-bg: #faf9f5;
+}
+
+html {
+-webkit-text-size-adjust: 100%;
+}
+body {
+background: var(--bg);
+color: var(--fg);
+font-family:
+"Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial,
+sans-serif;
+font-size: 16px;
+line-height: 1.75;
+max-width: 820px;
+margin: 0 auto;
+padding: 3rem 1.5rem 4rem;
+}
+
+header#title-block-header {
+margin-bottom: 2.5rem;
+padding-bottom: 1.25rem;
+border-bottom: 2px solid var(--accent);
+}
+h1.title {
+font-size: 2rem;
+line-height: 1.3;
+margin: 0 0 0.75rem;
+color: var(--accent-strong);
+letter-spacing: -0.01em;
+font-weight: 700;
+}
+p.subtitle {
+font-size: 1.1rem;
+color: var(--muted);
+margin: 0 0 1rem;
+}
+p.author,
+p.date {
+display: inline-block;
+font-size: 0.88rem;
+color: var(--muted);
+background: var(--accent-soft);
+border: 1px solid var(--border);
+border-radius: 4px;
+padding: 0.2rem 0.7rem;
+margin: 0 0.5rem 0.25rem 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+color: var(--accent-strong);
+line-height: 1.35;
+margin-top: 2.2rem;
+margin-bottom: 0.75rem;
+font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+font-weight: 650;
+letter-spacing: -0.01em;
+}
+h1 {
+font-size: 1.85rem;
+}
+h2 {
+font-size: 1.45rem;
+padding-bottom: 0.35rem;
+border-bottom: 1px solid var(--border);
+}
+h3 {
+font-size: 1.2rem;
+}
+h4 {
+font-size: 1.05rem;
+color: var(--fg);
+}
+h5 {
+font-size: 0.95rem;
+color: var(--fg);
+}
+h6 {
+font-size: 0.9rem;
+color: var(--muted);
+}
+
+p {
+margin: 0.8rem 0;
+}
+a {
+color: var(--accent-strong);
+text-decoration: underline;
+text-underline-offset: 3px;
+text-decoration-color: var(--border);
+}
+a:hover {
+text-decoration-color: currentColor;
+}
+strong {
+font-weight: 700;
+}
+hr {
+border: none;
+border-top: 1px solid var(--border);
+margin: 2.5rem 0;
+}
+ul,
+ol {
+padding-left: 1.5rem;
+margin: 0.75rem 0;
+}
+li {
+margin: 0.35rem 0;
+}
+
+code {
+font-family:
+ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace;
+font-size: 0.85em;
+background: var(--code-bg);
+color: var(--code-fg);
+border-radius: 4px;
+padding: 0.12em 0.35em;
+}
+pre {
+background: var(--pre-bg);
+color: var(--pre-fg);
+border: 1px solid var(--border);
+border-radius: 8px;
+padding: 1rem 1.25rem;
+overflow-x: auto;
+font-size: 0.88rem;
+line-height: 1.6;
+margin: 1rem 0;
+}
+pre code {
+background: transparent;
+color: inherit;
+padding: 0;
+font-size: inherit;
+}
+div.sourceCode pre,
+pre.sourceCode {
+background: var(--pre-bg) !important;
+color: var(--pre-fg);
+}
+div.sourceCode {
+margin: 1rem 0;
+}
+
+table {
+border-collapse: collapse;
+width: 100%;
+margin: 1.25rem 0;
+font-size: 0.92rem;
+display: block;
+overflow-x: auto;
+}
+th,
+td {
+border: 1px solid var(--border);
+padding: 0.55rem 0.9rem;
+text-align: left;
+vertical-align: top;
+}
+th {
+background: var(--accent-soft);
+color: var(--accent-strong);
+font-weight: 700;
+}
+tbody tr:nth-child(even) {
+background: var(--table-stripe);
+}
+tbody tr:hover {
+background: var(--table-hover);
+}
+
+blockquote {
+margin: 1.25rem 0;
+padding: 0.9rem 1.3rem;
+background: var(--quote-bg);
+border-left: 4px solid var(--accent);
+font-style: italic;
+color: #4a463f;
+}
+blockquote p {
+margin: 0.4rem 0;
+}
+blockquote p:first-child {
+margin-top: 0;
+}
+blockquote p:last-child {
+margin-bottom: 0;
+}
+
+nav#TOC {
+background: var(--quote-bg);
+border: 1px solid var(--border);
+border-radius: 6px;
+padding: 1.1rem 1.4rem;
+margin: 1.5rem 0 2.25rem;
+}
+nav#TOC > ul {
+list-style: none;
+padding-left: 0;
+margin: 0.5rem 0 0;
+columns: 2;
+column-gap: 2rem;
+}
+nav#TOC ul ul {
+list-style: none;
+padding-left: 1.1rem;
+margin: 0.1rem 0;
+}
+nav#TOC a {
+display: block;
+padding: 0.15rem 0;
+text-decoration: none;
+font-size: 0.92rem;
+color: var(--fg);
+font-family: "Segoe UI", system-ui, sans-serif;
+}
+nav#TOC a:hover {
+color: var(--accent-strong);
+text-decoration: underline;
+}
+nav#TOC::before {
+content: "Mục lục";
+display: block;
+font-weight: 700;
+font-size: 0.85rem;
+text-transform: uppercase;
+letter-spacing: 0.1em;
+color: var(--muted);
+font-family: "Segoe UI", system-ui, sans-serif;
+}
+@media (max-width: 640px) {
+nav#TOC > ul {
+columns: 1;
+}
+}
+
+img {
+max-width: 100%;
+height: auto;
+border-radius: 4px;
+}
+mark {
+background: #fef3c7;
+color: #33302c;
+padding: 0 0.2em;
+}
+kbd {
+font-family: inherit;
+background: var(--code-bg);
+border: 1px solid var(--border);
+border-bottom-width: 2px;
+border-radius: 4px;
+padding: 0.1em 0.45em;
+font-size: 0.85em;
+}
+@media print {
+body {
+max-width: none;
+padding: 1rem;
+}
+nav#TOC {
+display: none;
+}
+a {
+color: inherit;
+}
+}
+</style>
+</head>
+<body>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#nghiên-cứu-chiến-lược-mmo-với-máy-dual-xeon-e5-2680-v4-amd-mi50-kết-hợp-hệ-sinh-thái-ai-sẵn-có" id="toc-nghiên-cứu-chiến-lược-mmo-với-máy-dual-xeon-e5-2680-v4-amd-mi50-kết-hợp-hệ-sinh-thái-ai-sẵn-có">Nghiên
+cứu: Chiến lược MMO với máy Dual Xeon E5-2680 v4 + AMD MI50 — kết hợp hệ
+sinh thái AI sẵn có</a>
+<ul>
+<li><a href="#tóm-tắt-nội-dung-executive-summary" id="toc-tóm-tắt-nội-dung-executive-summary">Tóm tắt nội dung (Executive
+Summary)</a></li>
+<li><a href="#hiện-trạng-tài-sản-số-22-dự-án-tại-h" id="toc-hiện-trạng-tài-sản-số-22-dự-án-tại-h">1. Hiện trạng tài sản số —
+22 dự án tại H:</a></li>
+<li><a href="#phân-tích-phần-cứng-mới-2-xeon-e5-2680-v4-mi50" id="toc-phân-tích-phần-cứng-mới-2-xeon-e5-2680-v4-mi50">2. Phân tích
+phần cứng mới: 2× Xeon E5-2680 v4 + MI50</a></li>
+<li><a href="#phân-tích-các-hướng-mmo-có-nguồn-có-con-số" id="toc-phân-tích-các-hướng-mmo-có-nguồn-có-con-số">3. Phân tích các
+hướng MMO — có nguồn, có con số</a></li>
+<li><a href="#so-sánh-phương-án" id="toc-so-sánh-phương-án">4. So sánh
+phương án</a></li>
+<li><a href="#khuyến-nghị-recommendation" id="toc-khuyến-nghị-recommendation">5. Khuyến nghị
+(Recommendation)</a></li>
+<li><a href="#kết-luận" id="toc-kết-luận">6. Kết luận</a></li>
+<li><a href="#nguồn-link" id="toc-nguồn-link">Nguồn (link)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="nghiên-cứu-chiến-lược-mmo-với-máy-dual-xeon-e5-2680-v4-amd-mi50-kết-hợp-hệ-sinh-thái-ai-sẵn-có">Nghiên
+cứu: Chiến lược MMO với máy Dual Xeon E5-2680 v4 + AMD MI50 — kết hợp hệ
+sinh thái AI sẵn có</h1>
+<p>Ngày lập: 2026-08-13 — Loại báo cáo: Nghiên cứu / Chiến lược — KHÔNG
+có code</p>
+<p>Phạm vi: Khảo sát toàn bộ dự án tại <code>H:\Develop</code> (22
+repo), đánh giá năng lực phần cứng mới mua chưa lắp (2× Xeon E5-2680 v4
++ AMD Instinct MI50 16GB), đối chiếu với thực trạng hạ tầng hiện có (PC
+.171, Server .227), nghiên cứu web các hướng MMO khả thi: AI video
+production, nuôi tài khoản/fanpage, cày tool, bán bandwidth/proxy, bán
+dịch vụ AI local. Đề xuất lộ trình triển khai theo 3 mức ưu tiên. Nguồn
+chính: AMD ROCm docs · TechPowerUp · CPU Benchmark · Puget Systems ·
+Kompozy/AIBootcamp/Lumigen (faceless YouTube 2026) · WillItRunAI (VRAM
+requirements) · Honeygain/Caproxy (bandwidth) · BetonAI/Markaicode (AI
+services pricing) · blog BunnyHoneyClub (AI shorts studio) ·
+ZingServer/MKT Software (nuôi acc FB)</p>
+<hr />
+<h2 id="tóm-tắt-nội-dung-executive-summary">Tóm tắt nội dung (Executive
+Summary)</h2>
+<ul>
+<li><strong>Máy Xeon+MI50 là “máy xưởng” (batch worker) chứ không phải
+máy chạy chính</strong>: MI50 (gfx906) đã bị ROCm đưa vào maintenance
+mode từ 6.0 (bản cuối hỗ trợ đầy đủ là 5.7), phải dùng workaround
+(Docker image cộng đồng gfx906, <code>HSA_OVERRIDE_GFX_VERSION</code>) —
+chạy được ComfyUI/SDXL/SVD/Wan2.1-1.3B/LTX nhưng không theo đường
+official [1][2].</li>
+<li><strong>VRAM 16GB là nút thắt video</strong>: Wan2.1-14B cần 22-26GB
+(FP8) → chỉ chạy bản GGUF Q4/Q5 6-10GB + CPU offload; bản 1.3B (8-13GB
+FP16) và LTX-Video 2B (8GB min/12GB 720p) là “vừa khít” [3][4].</li>
+<li><strong>Hướng có lợi thế lớn nhất là AI video production theo mô
+hình “factory”</strong>: sẵn có MovieMaker (13 pipelines), SlncTrZ_VMK
+(DOM robot tự động hóa Google Flow/ChatGPT/Grok/Gemini/Veo), Omnivoice
+(TTS 600+ ngôn ngữ, voice cloning) — đây là stack hiếm người có, kết hợp
+với Xeon để render batch [5][6].</li>
+<li><strong>Pure-AI channel thu nhập thấp và bị YouTube siết</strong>:
+policy “inauthentic content” (15/07/2025) đánh vào template content;
+phải lai AI+human để giữ retention (chênh 3-10×). Median 5-9 tháng mới
+đạt monetize, $300-2000/tháng ở tháng 12-18 [7][8].</li>
+<li><strong>Bán bandwidth/proxy và nuôi acc FB là hướng rủi ro cao, lợi
+nhuận thấp</strong>: Honeygain ~$5-20/tháng/thiết bị; nuôi acc vi phạm
+ToS Facebook, dễ checkpoint/ban — không nên làm chủ lực [9][10].</li>
+<li><strong>Hướng bán dịch vụ AI local (deploy cho SME luật/y tế/bất
+động sản) có giá trị cao nhất</strong>: $2.5K-25K/dự án, solo operator
+$4K-18K/tháng — tận dụng đúng sức mạnh Xeon 56 threads + MI50 chạy
+inference 24/7 [11][12].</li>
+</ul>
+<hr />
+<h2 id="hiện-trạng-tài-sản-số-22-dự-án-tại-h">1. Hiện trạng tài sản số —
+22 dự án tại H:</h2>
+<h3 id="bản-đồ-dự-án-khảo-sát-trực-tiếp-2026-08-13">1.1 Bản đồ dự án
+(khảo sát trực tiếp 2026-08-13)</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Dự án</th>
+<th>Vai trò</th>
+<th>Mức độ liên quan MMO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MovieMaker</strong></td>
+<td>Electron app, 13 pipeline video AI (drama, cinematic, clip-factory,
+localization-dub, podcast-repurpose…)</td>
+<td>⭐⭐⭐ Video factory</td>
+</tr>
+<tr>
+<td><strong>SlncTrZ_VMK</strong></td>
+<td>Chrome MV3 DOM Robot tự động hóa Google Flow/ChatGPT/Grok/Gemini/Veo
+(i2p, watermark, WS bridge n8n)</td>
+<td>⭐⭐⭐ Cày tool AI miễn phí</td>
+</tr>
+<tr>
+<td><strong>Omnivoice</strong></td>
+<td>TTS zero-shot 600+ ngôn ngữ, voice cloning, RTF 0.025 (chạy API 8880
+trên .171)</td>
+<td>⭐⭐⭐ Dub/lồng tiếng</td>
+</tr>
+<tr>
+<td><strong>Training</strong></td>
+<td>Fine-tune Qwen3-0.6B QLoRA (unsloth), dataset EN+VI 15,765 mẫu, xuất
+GGUF cho Ollama</td>
+<td>⭐⭐ Model riêng</td>
+</tr>
+<tr>
+<td><strong>OpenMontage</strong></td>
+<td>Pipeline YAML manifests + skill files + tool registry</td>
+<td>⭐⭐ Xương sống pipeline</td>
+</tr>
+<tr>
+<td><strong>TheGhost</strong></td>
+<td>Cyber Brain framework (research→ADR→code→nghiệm thu) + benchmark
+tooling</td>
+<td>⭐ Quy trình</td>
+</tr>
+<tr>
+<td><strong>Dataset</strong></td>
+<td>Pipeline VAD→transcribe→validate→assemble→TTS augment</td>
+<td>⭐ Data tự sinh</td>
+</tr>
+<tr>
+<td><strong>Slnc_Pi</strong></td>
+<td>Config agent Pi + scripts (md2html, setup)</td>
+<td>⭐ Hạ tầng</td>
+</tr>
+<tr>
+<td><strong>Omnivoice/DMX/ArtNet/UAV/Ebook…</strong></td>
+<td>DMX autopilot, ArtNet controller, UAV flying wing, ebook
+translator</td>
+<td>— Ngoài phạm vi MMO</td>
+</tr>
+</tbody>
+</table>
+<h3 id="năng-lực-cốt-lõi-đã-chứng-minh-evidence-từ-repo">1.2 Năng lực
+cốt lõi đã chứng minh (evidence từ repo)</h3>
+<ul>
+<li><strong>MovieMaker</strong>: 13 pipeline production sẵn sàng,
+backlot approve/reject gates, AI SDK 12 vendor adapters — đã hoàn thiện
+proposal + plan (MOVIEMAKER_PROPOSAL.md, TOONFLOWX_PLAN.md) [5].</li>
+<li><strong>SlncTrZ_VMK</strong>: 21 module extension, đã fork từ Toby
+Flow v1.1.2, tự động hóa generation qua web miễn phí — “3 việc: Input →
+Submit → Output” [6].</li>
+<li><strong>Training</strong>: đã chạy fine-tune thật (báo cáo đánh giá
+2026-08-12: 15,765 mẫu, batch 8, coverage 25% với 500 steps) — pipeline
+chạy được, đang tối ưu tham số [13].</li>
+</ul>
+<h3 id="hạ-tầng-hiện-có-kb-device-inventory-v2-verified-2026-08-13">1.3
+Hạ tầng hiện có (KB device inventory v2, verified 2026-08-13)</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Máy</th>
+<th>Cấu hình</th>
+<th>Vai trò hiện tại</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PC .171</strong> (Slnc_TrZ)</td>
+<td>i5-12400F, 24GB RAM, RTX 3060 12GB, Win 11</td>
+<td>Agent Pi/OpenCode, Ollama (qwen3-vl, gemma, nomic-embed), Omnivoice
+API 8880, ComfyUI (12.4GB RAM khi chạy)</td>
+</tr>
+<tr>
+<td><strong>Server .227</strong> (ASUS X542UQR)</td>
+<td>i5-8250U, 8GB RAM, 940MX 2GB, Ubuntu 24.04</td>
+<td>Docker: qdrant, ollama, pi-core, n8n, cloudflared, nginx-reports,
+pandoc</td>
+</tr>
+<tr>
+<td><strong>Máy MỚI (chưa lắp)</strong></td>
+<td>2× Xeon E5-2680 v4 + AMD MI50 16GB</td>
+<td>Chưa quyết định — chính là chủ đề báo cáo này</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="phân-tích-phần-cứng-mới-2-xeon-e5-2680-v4-mi50">2. Phân tích
+phần cứng mới: 2× Xeon E5-2680 v4 + MI50</h2>
+<h3 id="thông-số-kỹ-thuật-verified-nguồn-chính-thức">2.1 Thông số kỹ
+thuật (verified nguồn chính thức)</h3>
+<p><strong>Dual Xeon E5-2680 v4</strong> [14]: - 2× 14 cores =
+<strong>28 cores / 56 threads</strong>, Broadwell-EP (2016), base 2.4GHz
+/ turbo 3.3GHz - 2× 120W TDP = 240W (không tính RAM/platform), CPU Mark
+~27,183 (2 socket) - <strong>Điểm yếu</strong>: single-thread thấp
+(1,946 MOps/s — bằng ~47% CPU hiện đại) → model LLM inference theo
+prompt bị chậm - <strong>Điểm mạnh</strong>: H.264 4K software encode
+~37fps, HEVC 4K ~23fps, ProRes 4K ~71fps (bench với RTX 3090) →
+<strong>render video batch song song rất tốt</strong></p>
+<p><strong>AMD Instinct MI50</strong> [15][16]: - <strong>16GB HBM2 ECC,
+băng thông 1TB/s</strong>, 300W TDP, PCIe 4.0 - 26.5 TFLOPS FP16 / 13.3
+TFLOPS FP32 — FP16 gấp đôi FP32 → <strong>ưu tiên chạy
+FP16/quantized</strong> - VCE 4.1: encode H.264/HEVC (KHÔNG AV1);
+passive cooling (cần gió) - <strong>⚠️ Hỗ trợ phần mềm</strong>: gfx906
+→ ROCm 6.0 chuyển maintenance mode; <strong>ROCm 5.7 là bản cuối hỗ trợ
+đầy đủ</strong>; báo cáo user 2025: support bị drop ở 6.4.0 [1][2]</p>
+<h3 id="đánh-giá-khả-năng-chạy-comfyui-ai-trên-mi50">2.2 Đánh giá khả
+năng chạy ComfyUI / AI trên MI50</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Khả thi?</th>
+<th>Ghi chú thực nghiệm cộng đồng</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ComfyUI (SD1.5/SDXL)</td>
+<td>✅ Có</td>
+<td>Docker image cộng đồng “Mixer 3607” cho gfx906, Ubuntu 24.04; SD
+Turbo 512px &lt;1s; SDXL 1024px chạy được</td>
+</tr>
+<tr>
+<td>Stable Video Diffusion</td>
+<td>✅ Có</td>
+<td><code>--force-fp32</code> giúp nhanh đáng kể trên AMD (30 phút → 1
+phút)</td>
+</tr>
+<tr>
+<td>Wan2.1-1.3B (video)</td>
+<td>✅ Vừa khít</td>
+<td>FP16 8-13GB, GGUF Q4 4-6GB — MI50 16GB OK</td>
+</tr>
+<tr>
+<td>LTX-Video 2B</td>
+<td>✅ Vừa khít</td>
+<td>8GB min / 12GB 720p</td>
+</tr>
+<tr>
+<td>Wan2.1-14B</td>
+<td>⚠️ Nén mới chạy</td>
+<td>FP16 54-65GB / FP8 22-26GB → bắt buộc GGUF Q4/Q5 6-10GB + T5 CPU
+offload (cần 24-32GB RAM) — <strong>Xeon 56 threads + RAM DDR4 rẻ là
+điểm tựa</strong></td>
+</tr>
+<tr>
+<td>FLUX.1 (12B)</td>
+<td>⚠️ Nén</td>
+<td>tương tự Wan2.1-14B, GGUF Q4 + offload</td>
+</tr>
+<tr>
+<td>LLM inference (llama.cpp/Ollama)</td>
+<td>✅ Tốt</td>
+<td>74 tok/s trên 120B với 3 GPU (2×MI50+Radeon VII) — 16GB HBM2 + băng
+thông 1TB/s là lợi thế</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Kết luận phần cứng</strong>: MI50 là GPU “compute-first” phù
+hợp <strong>inference + image/video gen tầm trung</strong> chứ không
+phải GPU mạnh nhất cho training hiện đại (không FP8/FP4, không tensor
+core kiểu mới). Điểm bù là HBM2 16GB 1TB/s giá rẻ + CPU 56 threads cực
+mạnh cho pipeline (encode, offload, data processing). [3][4][17]</p>
+<h3 id="chi-phí-vận-hành-ước-tính">2.3 Chi phí vận hành (ước tính)</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Thành phần</th>
+<th>Công suất</th>
+<th>Ghi chú</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2× Xeon (idle→load)</td>
+<td>~110W → 240W+</td>
+<td>idle thực tế cả hệ 2 socket ~110-220W tùy RAM/HDD [18]</td>
+</tr>
+<tr>
+<td>MI50</td>
+<td>300W peak</td>
+<td>passive, cần quạt</td>
+</tr>
+<tr>
+<td>RAM + platform + quạt</td>
+<td>~50-80W</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Tổng full-load ước tính</strong></td>
+<td><strong>~450-600W</strong></td>
+<td>≈ 10-14 kWh/ngày nếu chạy 24/7</td>
+</tr>
+<tr>
+<td><strong>Tiền điện VN (~2,500đ/kWh)</strong></td>
+<td><strong>~750K-1,050K₫/tháng</strong></td>
+<td>chạy 24/7 full load</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="phân-tích-các-hướng-mmo-có-nguồn-có-con-số">3. Phân tích các
+hướng MMO — có nguồn, có con số</h2>
+<h3 id="hướng-a-ai-video-production-faceless-channel-shorts-factory-lợi-thế-nhất">3.1
+Hướng A: AI Video Production (faceless channel + shorts factory) ⭐ Lợi
+thế nhất</h3>
+<p><strong>Bối cảnh thị trường 2026</strong> [7][8][19]: - Faceless
+YouTube <strong>vẫn khả thi</strong> nhưng: pure-AI (script+TTS+stock
+B-roll, không human edit) retention kém 3-10× so với hybrid AI+human -
+<strong>Policy mới 15/07/2025</strong>: YouTube đổi “repetitious
+content” → “inauthentic content”, nhắm thẳng mass-produced AI template;
+phải có “significant original commentary/educational/entertainment
+value” - Income reality: $0 trong 6-12 tháng đầu (đủ 1,000 subs + 4,000h
+watch / 10M Shorts views 90 ngày); median 5-9 tháng đạt monetize; tháng
+12-18: <strong>$300-2,000/tháng</strong> niche tốt - RPM cao:
+finance/tech/education $15-45; gaming/entertainment $2-7 - <strong>Cần
+đa kênh thu nhập</strong>: affiliate, sponsorship, digital products — ad
+revenue đơn thuần chỉ $2-4 RPM ở niche AI</p>
+<p><strong>Con số shorts automation</strong> [20][21]: - Studio lớn: 1
+tỷ views/tháng, 60 accounts, 31K shorts/tháng, chi phí $0.18-0.42/short,
+5.4× revenue/cost - Solo creator: 60 video tự động → <strong>$34 sau 1
+tháng</strong> (Shorts Fund + TikTok + affiliate) — median render 4.3
+phút/video - AutoShorts.ai: $40K MRR &lt;6 tháng, margin 75% - ⚠️ “Fully
+autonomous” là marketing; vẫn cần human review ở checkpoints; moderation
+không nhất quán giữa các nền tảng</p>
+<p><strong>Lợi thế riêng của Anh</strong> (không ai khác có): -
+MovieMaker 13 pipelines → tự động hóa toàn bộ quy trình
+idea→script→storyboard→video - SlncTrZ_VMK DOM robot → dùng Google
+Flow/ChatGPT/Grok/Gemini/Veo <strong>miễn phí qua web</strong> (không
+tốn API $), có watermark + batch - Omnivoice → lồng tiếng 600+ ngôn ngữ,
+voice cloning → <strong>localization/dub pipeline</strong>
+(localization-dub pipeline của MovieMaker đã có sẵn!) - Xeon 56 threads
+→ batch render nhiều video song song, không nghẽn CPU encode</p>
+<h3 id="hướng-b-bán-dịch-vụ-ai-local-deploy-cho-sme-giá-trị-cao-nhấtdự-án">3.2
+Hướng B: Bán dịch vụ AI local (deploy cho SME) ⭐ Giá trị cao nhất/dự
+án</h3>
+<p><strong>Thị trường</strong> [11][12]: - Doanh nghiệp nhỏ (luật, y tế,
+home services, bất động sản) cần AI nhưng không gửi dữ liệu nhạy cảm lên
+cloud → cần deploy local - Pricing tiered: Starter $2.5K-5K (workstation
++ 1-2 models + RAG basic) → Professional $8K-15K → Enterprise $15K-25K +
+$2K-5K/tháng retainer - <strong>Solo operator: $4K-18K/tháng với 2-4
+khách</strong>; Ollama rental: 10-20 khách × $5-15/tháng →
+$500-2,000/tháng trong 6 tháng - Outreach theo “specific business
+observation” thay vì generic pitch</p>
+<p><strong>Khớp với hạ tầng</strong>: - Xeon 56 threads + MI50 16GB +
+RAM DDR4 rẻ → máy inference 24/7 rất hợp cho 10-20 client nhỏ - Đã có:
+Ollama (chạy nhiều model), n8n, cloudflared tunnel (đã có
+<code>*.truongcongdinh.org</code>!), pi-core → đủ nền để làm AI gateway
+cho khách - Đã có kinh nghiệm fine-tune Qwen3 + dataset VN → có thể bán
+model tiếng Việt riêng</p>
+<h3 id="hướng-c-nuôi-tài-khoản-fanpage-group-tự-động-rủi-ro-cao">3.3
+Hướng C: Nuôi tài khoản / fanpage / group tự động ⚠️ Rủi ro cao</h3>
+<p><strong>Thực trạng</strong> [10][22]: - Vi phạm ToS Facebook → ban
+tạm thời/vĩnh viễn kèm fanpage/group/ad account - Tool phổ biến VN: MKT
+Care, Maxcare, Ninja Care (quản lý hàng trăm acc, auto
+like/comment/share, vượt checkpoint, proxy management) - “An toàn” tương
+đối: 1 acc 1 residential proxy, IP ổn định, tốc độ tự nhiên, giả lập
+hành vi thật (scroll, view…) - Rủi ro: checkpoint (vd 282), lock, ban;
+tool có thể thu thập dữ liệu người dùng</p>
+<p><strong>Đánh giá</strong>: Lợi nhuận đến từ bán acc/fanpage đã nuôi
+hoặc chạy ads — mảng xám, cạnh tranh với tool thương mại sẵn có, rủi ro
+mất trắng tài sản số. <strong>Chỉ nên làm ở mức phụ trợ</strong> (nuôi
+vài acc chính chủ để chạy content của chính mình), không làm sản phẩm
+chính. Phần cứng Xeon/MI50 <strong>không mang lại lợi thế gì</strong>
+cho hướng này (nuôi acc phụ thuộc proxy/device fingerprint, không phụ
+thuộc GPU).</p>
+<h3 id="hướng-d-bán-bandwidth-proxy-lợi-nhuận-thấp-rủi-ro-pháp-lý">3.4
+Hướng D: Bán bandwidth / proxy ⚠️ Lợi nhuận thấp, rủi ro pháp lý</h3>
+<p><strong>Thực trạng</strong> [9]: -
+Honeygain/ByteLixir/PacketStream/ProxyRack: $0.10-0.50/GB, <strong>1
+device 1 IP: $5-20/tháng</strong> (vùng US/UK/Đức cao nhất) - Nhiều IP +
+referral: $50-100+/tháng nhưng cần 24/7 uptime, 50+ Mbps, IP riêng từng
+device - Điều kiện: vị trí địa lý (US/EU premium), tốc độ, số IP, uptime
+— <strong>IP VN giá rẻ, máy Xeon tiêu 450-600W để kiếm $5-20/tháng là lỗ
+điện</strong></p>
+<p><strong>Đánh giá</strong>: Không kinh tế với máy tiêu thụ điện cao;
+IP Việt Nam không thuộc vùng premium. <strong>Loại bỏ</strong> hoặc chỉ
+cài Honeygain trên máy rẻ tiền luôn bật sẵn. Rủi ro pháp lý khi bán
+proxy (dùng cho bot, fraud) cũng đáng cân nhắc.</p>
+<h3 id="hướng-e-cày-tool-automation-service">3.5 Hướng E: Cày tool /
+automation service</h3>
+<ul>
+<li><strong>Cày tool hợp pháp</strong>: dùng SlncTrZ_VMK + n8n để tự
+động hóa công việc content (scheduling, batch gen, cross-post) cho chính
+Anh hoặc bán service “AI content automation” cho SME
+($200-1,000/tháng/khách) — kết hợp tốt với 3.2</li>
+<li><strong>Cày game/click</strong>: hầu hết vi phạm ToS game, thu nhập
+thấp, không cần GPU mạnh → không khuyến nghị</li>
+<li><strong>Tool marketplace</strong>: bán script/extension đã làm (VD:
+VMK dạng product) — nguồn thu passive tốt, có thể đóng gói thành SaaS
+nhỏ</li>
+</ul>
+<hr />
+<h2 id="so-sánh-phương-án">4. So sánh phương án</h2>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Tiêu chí</th>
+<th>A. AI Video Factory</th>
+<th>B. AI Service SME</th>
+<th>C. Nuôi acc FB</th>
+<th>D. Bán bandwidth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Khớp hạ tầng sẵn có</strong></td>
+<td>⭐⭐⭐ (MovieMaker+VMK+Omnivoice)</td>
+<td>⭐⭐⭐ (Ollama+n8n+tunnel+finetune)</td>
+<td>⭐ (không dùng GPU)</td>
+<td>⭐ (không dùng GPU, IP VN rẻ)</td>
+</tr>
+<tr>
+<td><strong>Khớp Xeon+MI50 mới</strong></td>
+<td>⭐⭐⭐ (batch render, video gen)</td>
+<td>⭐⭐⭐ (inference 24/7, 16GB HBM2)</td>
+<td>⭐</td>
+<td>⭐</td>
+</tr>
+<tr>
+<td><strong>Vốn khởi đầu</strong></td>
+<td>Thấp (đã có hết)</td>
+<td>Thấp-Trung (deploy + marketing)</td>
+<td>Trung (proxy, tool)</td>
+<td>Rất thấp</td>
+</tr>
+<tr>
+<td><strong>Thu nhập tiềm năng</strong></td>
+<td>$300-2K/tháng (12-18 tháng) / factory scale hơn</td>
+<td><strong>$4K-18K/tháng</strong> solo</td>
+<td>Không ổn định, mảng xám</td>
+<td>$5-20/tháng</td>
+</tr>
+<tr>
+<td><strong>Thời gian ra tiền</strong></td>
+<td>5-9 tháng (monetize YT)</td>
+<td>2-4 tháng</td>
+<td>Nhanh nhưng rủi ro ban</td>
+<td>Ngay nhưng cực thấp</td>
+</tr>
+<tr>
+<td><strong>Rủi ro</strong></td>
+<td>Policy YT thay đổi, content saturated</td>
+<td>Tìm khách, triển khai</td>
+<td><strong>Ban acc, pháp lý</strong></td>
+<td>ISP policy, pháp lý</td>
+</tr>
+<tr>
+<td><strong>Lock-in / bảo trì</strong></td>
+<td>Low (local-first)</td>
+<td>Trung (client support)</td>
+<td>Cao (tool + proxy chạy tiếp)</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><strong>Tầm nhìn 10 năm</strong></td>
+<td>Brand content + product hóa tool</td>
+<td>Dịch vụ AI local là trend dài</td>
+<td>Càng ngày càng bị siết</td>
+<td>Càng ngày càng bị siết</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="khuyến-nghị-recommendation">5. Khuyến nghị (Recommendation)</h2>
+<h3 id="chiến-lược-tổng-ai-video-factory-làm-mặt-trận-ai-service-làm-hậu-thuẫn">Chiến
+lược tổng: <strong>“AI Video Factory làm mặt trận, AI Service làm hậu
+thuẫn”</strong></h3>
+<p>Chọn <strong>kết hợp A + B làm trục chính</strong>, C và D loại bỏ
+hoặc giữ ở mức tối thiểu:</p>
+<ol type="1">
+<li><strong>Ưu tiên 1 — Lắp và vận hành máy Xeon+MI50 như “xưởng render
++ inference server”</strong>:
+<ul>
+<li>OS: Ubuntu 24.04 (nhất quán với .227); ROCm 5.7 (bản cuối hỗ trợ
+gfx906 đầy đủ) hoặc Docker image gfx906 cộng đồng cho ComfyUI
+[2][17]</li>
+<li>RAM: 64-128GB DDR4 (rẻ) — quan trọng cho T5 offload (Wan2.1-14B/FLUX
+GGUF cần 24-32GB RAM)</li>
+<li>Lắp quạt đối lưu mạnh cho MI50 passive + airflow case</li>
+<li>Benchmark trước khi dùng: chạy ComfyUI SDXL + Wan2.1-1.3B + LTX để
+xác định tốc độ thực (nghiệm thu đo được, không “hy vọng chạy”)</li>
+</ul></li>
+<li><strong>Ưu tiên 2 — Vận hành AI Video Factory (A)</strong>:
+<ul>
+<li>Dùng MovieMaker 13 pipelines + SlncTrZ_VMK (gen qua web miễn phí) +
+Omnivoice (dub đa ngôn ngữ) trên .171, chuyển render nặng sang máy
+Xeon</li>
+<li>Chọn niche “hybrid”: narrative documentary, specialized education,
+deep-dive analysis (finance/tech — RPM $15-45) — <strong>tránh</strong>
+top-10 list, motivation, AI news aggregation [8]</li>
+<li>Batch shorts 5-20 video/ngày, human review ở checkpoint, đo
+retention để chỉnh</li>
+</ul></li>
+<li><strong>Ưu tiên 3 — Bán AI Service cho SME (B) — thu nhập chính dài
+hạn</strong>:
+<ul>
+<li>Đóng gói: Ollama multi-model + RAG + n8n + tunnel cloudflared (đã có
+sẵn hạ tầng!) → “private AI box” $2.5K-15K cho luật/y tế/bất động sản
+VN</li>
+<li>Tận dụng kinh nghiệm fine-tune Qwen3 tiếng Việt làm điểm khác
+biệt</li>
+<li>Song song: Ollama rental $5-15/tháng × 10-20 khách cho thu nhập định
+kỳ</li>
+</ul></li>
+<li><strong>Loại bỏ/giảm thiểu</strong>:
+<ul>
+<li>Bán bandwidth: chỉ cài Honeygain trên máy luôn bật rẻ tiền (không
+phải Xeon) — hoặc bỏ</li>
+<li>Nuôi acc FB: không làm tool nuôi hàng loạt; chỉ nuôi acc chính chủ
+phục vụ content của chính mình</li>
+</ul></li>
+</ol>
+<p>→ Chốt quyết định: <strong>chờ Anh duyệt</strong> để tạo ADR chi tiết
+cho từng hướng (ADR-2026-08-13-A-video-factory,
+ADR-2026-08-13-B-ai-service). Chưa lắp máy vội — có thể chạy thử nghiệm
+ComfyUI trên .171 (RTX 3060) trước để đo chất lượng pipeline.</p>
+<hr />
+<h2 id="kết-luận">6. Kết luận</h2>
+<p>Máy Xeon 2680 v4 + MI50 là khoản đầu tư đúng hướng cho <strong>AI
+video production và inference service</strong> — không phải để nuôi acc
+hay bán bandwidth (hai hướng này không tận dụng được phần cứng và rủi ro
+cao). Lợi thế lớn nhất của Anh là <strong>stack AI content đã xây
+xong</strong> (MovieMaker + VMK + Omnivoice + finetune), chỉ cần thêm
+“xưởng render” này là thành hệ thống factory hoàn chỉnh. Hướng thu nhập
+chính bền vững là bán dịch vụ AI local cho SME Việt Nam, lấy video
+content làm kênh marketing + nguồn thu phụ.</p>
+<p><em>Tái kiểm tra khi: lắp máy xong (benchmark thực tế), YouTube
+policy cập nhật tiếp, ROCm có bản hỗ trợ gfx906 tốt hơn.</em></p>
+<hr />
+<h2 id="nguồn-link">Nguồn (link)</h2>
+<p>[1]
+https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.3.3/reference/system-requirements.html
+[2] https://github.com/ROCm/ROCm/releases/tag/rocm-6.0.0 ·
+https://diegostrebel.com/posts/instinct_mi_50/ [3]
+https://willitrunai.com/video-models/wan-video-2-1-14b ·
+https://willitrunai.com/blog/wan-2-2-vram-requirements [4]
+https://docs.clore.ai/guides/comparisons/video-gen-comparison [5] H:.md
+· MOVIEMAKER_PROPOSAL.md [6] H:_VMK.md [7]
+https://kompozy.io/ai-content/faceless-youtube [8]
+https://aivideobootcamp.com/blog/how-to-make-money-faceless-youtube-ai/
+· https://lumigen.app/blog/faceless-youtube-channel-ai-2026/ [9]
+https://www.honeygain.com/sell-internet-data/ ·
+https://caproxy.com/en/blog/sell-internet-bandwidth/ [10]
+https://zingserver.com/nuoi-acc-facebook-tu-dong-tren-vps-python-selenium/
+· https://mktsoftware.vn/phan-mem-vuot-checkpoint-facebook [11]
+https://betonai.net/how-to-build-a-5k-20k-month-private-ai-installation-business-in-2026-the-privacy-first-gold-rush-complete-setup-pricing-and-client-acquisition-guide/
+[12]
+https://markaicode.com/ai-agent-income-stream-ollama-rental-revenue/
+[13] H:\2026.08.12_Bao_cao_danh_gia_finetune.md [14]
+https://www.cpubenchmark.net/cpu.php?cpu=Intel+Xeon+E5-2680+v4+%40+2.40GHz&amp;cpuCount=2
+·
+https://www.pugetsystems.com/pugetbench/results/profile/c821fa74-d35b-11ef-a4e4-bc241170a2bb/
+[15] https://www.techpowerup.com/gpu-specs/radeon-instinct-mi50.c3335 ·
+https://www.amd.com/en/products/specifications/accelerators.html [16]
+https://www.youtube.com/watch?v=7FtU7t1KUNg [17]
+https://github.com/Comfy-Org/ComfyUI/issues/2096 [18]
+https://forums.unraid.net/topic/97358-whats-your-idle-power-consumption/
+[19]
+https://virvid.ai/blog/monetize-faceless-ai-content-complete-guide-2026
+· https://launchtoolsai.com/tutorials/ai-video-automation-income-2026
+[20]
+https://blog.bunnyhoneyclub.com/posts/content-automation-system-1-billion-views
+[21]
+https://dev.to/tamayerd/how-much-i-made-from-ai-generated-videos-real-numbers-24c8
+· https://www.usekineo.com/state-of-ai-shorts-2026 [22]
+https://24hmoney.vn/news/tool-nuoi-nick-facebook-co-that-su-hieu-qua-c53a2452605.html</p>
+<hr />
+<p><em>Ngày cập nhật cuối: 2026-08-13</em></p>
+<!-- DLBTN: floating download button injected by md2html.ps1 (2026-08-13) -->
+<div id="dlbtn" style="position:fixed;right:20px;bottom:20px;z-index:99999;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;">
+  <div id="dlbtn-menu" style="display:none;position:absolute;right:0;bottom:56px;background:#161b22;border:1px solid #30363d;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.55);overflow:hidden;min-width:170px;">
+    <a href="#" id="dlbtn-md" style="display:block;padding:11px 18px;color:#e6edf3;text-decoration:none;font-size:13.5px;white-space:nowrap;">⬇&#xFE0E; Tải file .md</a>
+    <a href="#" id="dlbtn-html" style="display:block;padding:11px 18px;color:#e6edf3;text-decoration:none;font-size:13.5px;white-space:nowrap;border-top:1px solid #30363d;">⬇&#xFE0E; Tải file .html</a>
+  </div>
+  <button id="dlbtn-main" title="Tải xuống" aria-label="Tải xuống" style="width:52px;height:52px;border-radius:50%;border:none;background:#58a6ff;color:#0d1117;cursor:pointer;box-shadow:0 4px 18px rgba(88,166,255,.45);display:flex;align-items:center;justify-content:center;transition:transform .12s,background .12s;">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5"/><path d="M4 21h16"/></svg>
+  </button>
+</div>
+<script>
+(function(){
+  // Chi hien nut khi xem qua web (co /download/); an khi mo file:// local
+  if (location.protocol === 'file:') {
+    var w = document.getElementById('dlbtn');
+    if (w) w.style.display = 'none';
+    return;
+  }
+  var p = location.pathname.split('/').pop();
+  if (!p || p === 'index.html' || p === '' || p.indexOf('.html') < 0) return;
+  var base = p.replace(/\.html$/, '');
+  var md = document.getElementById('dlbtn-md');
+  var html = document.getElementById('dlbtn-html');
+  if (md)   md.href   = 'download/' + base + '.md';
+  if (html) html.href = 'download/' + base + '.html';
+  var btn = document.getElementById('dlbtn-main');
+  var menu = document.getElementById('dlbtn-menu');
+  if (!btn || !menu) return;
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var show = menu.style.display !== 'block';
+    menu.style.display = show ? 'block' : 'none';
+    btn.style.transform = show ? 'scale(.92)' : '';
+  });
+  document.addEventListener('click', function(){ menu.style.display = 'none'; btn.style.transform = ''; });
+  menu.addEventListener('click', function(e){ e.stopPropagation(); });
+})();
+</script>
+
+</body>
+</html>

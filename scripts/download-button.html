@@ -1,0 +1,38 @@
+<!-- DLBTN: floating download button injected by md2html.ps1 (2026-08-13) -->
+<div id="dlbtn" style="position:fixed;right:20px;bottom:20px;z-index:99999;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;">
+  <div id="dlbtn-menu" style="display:none;position:absolute;right:0;bottom:56px;background:#161b22;border:1px solid #30363d;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.55);overflow:hidden;min-width:170px;">
+    <a href="#" id="dlbtn-md" style="display:block;padding:11px 18px;color:#e6edf3;text-decoration:none;font-size:13.5px;white-space:nowrap;">⬇&#xFE0E; Tải file .md</a>
+    <a href="#" id="dlbtn-html" style="display:block;padding:11px 18px;color:#e6edf3;text-decoration:none;font-size:13.5px;white-space:nowrap;border-top:1px solid #30363d;">⬇&#xFE0E; Tải file .html</a>
+  </div>
+  <button id="dlbtn-main" title="Tải xuống" aria-label="Tải xuống" style="width:52px;height:52px;border-radius:50%;border:none;background:#58a6ff;color:#0d1117;cursor:pointer;box-shadow:0 4px 18px rgba(88,166,255,.45);display:flex;align-items:center;justify-content:center;transition:transform .12s,background .12s;">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5"/><path d="M4 21h16"/></svg>
+  </button>
+</div>
+<script>
+(function(){
+  // Chi hien nut khi xem qua web (co /download/); an khi mo file:// local
+  if (location.protocol === 'file:') {
+    var w = document.getElementById('dlbtn');
+    if (w) w.style.display = 'none';
+    return;
+  }
+  var p = location.pathname.split('/').pop();
+  if (!p || p === 'index.html' || p === '' || p.indexOf('.html') < 0) return;
+  var base = p.replace(/\.html$/, '');
+  var md = document.getElementById('dlbtn-md');
+  var html = document.getElementById('dlbtn-html');
+  if (md)   md.href   = 'download/' + base + '.md';
+  if (html) html.href = 'download/' + base + '.html';
+  var btn = document.getElementById('dlbtn-main');
+  var menu = document.getElementById('dlbtn-menu');
+  if (!btn || !menu) return;
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var show = menu.style.display !== 'block';
+    menu.style.display = show ? 'block' : 'none';
+    btn.style.transform = show ? 'scale(.92)' : '';
+  });
+  document.addEventListener('click', function(){ menu.style.display = 'none'; btn.style.transform = ''; });
+  menu.addEventListener('click', function(e){ e.stopPropagation(); });
+})();
+</script>

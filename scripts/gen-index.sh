@@ -1,6 +1,8 @@
 #!/bin/bash
-# gen-index.sh — Sinh index.html card grid từ reports/*.html
-# Wing: ops | Topic: reports | Updated: 2026-08-11
+# gen-index.sh — Sinh index.html card grid từ reports/*.html (+ nút download .md/.html)
+# Wing: ops | Topic: reports | Updated: 2026-08-13
+# Thay đổi: card thành div (tránh <a> lồng <a>), thêm nút download qua /download/ (nginx)
+#           — .md KHÔNG xem trực tiếp (404), CHỈ tải về qua /download/ (attachment)
 DIR=/home/dinhtc/docker-all/reports
 OUT=$DIR/index.html
 
@@ -24,8 +26,13 @@ header p{color:var(--dim);margin-top:8px;font-size:14px}
 .card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 8px 24px rgba(88,166,255,.12)}
 .icon{font-size:30px;margin-bottom:14px}
 .title{font-size:15.5px;font-weight:600;line-height:1.45;word-break:break-word}
+.title a{color:var(--text);text-decoration:none}
+.title a:hover{color:var(--accent)}
 .meta{color:var(--dim);font-size:12px;margin-top:12px;display:flex;gap:12px}
 .badge{display:inline-block;background:rgba(88,166,255,.14);color:var(--accent);border:1px solid rgba(88,166,255,.3);border-radius:20px;padding:3px 12px;font-size:11px;margin-top:14px;width:fit-content}
+.dl{display:flex;gap:8px;margin-top:10px}
+.dl-btn{display:inline-block;background:rgba(63,185,80,.1);color:#3fb950;border:1px solid rgba(63,185,80,.35);border-radius:8px;padding:5px 12px;font-size:12px;text-decoration:none;transition:background .15s}
+.dl-btn:hover{background:rgba(63,185,80,.22)}
 footer{text-align:center;color:var(--dim);font-size:12px;padding:20px}
 @media(max-width:600px){.grid{padding:16px;grid-template-columns:1fr}header h1{font-size:20px}}
 </style>
@@ -42,21 +49,31 @@ for f in $(ls -1t "$DIR"/*.html 2>/dev/null | grep -v index.html); do
   name=$(basename "$f")
   base="${name%.html}"
   d=""; slug="$base"
+  mtime=$(stat -c '%y' "$f")
+  mdate="${mtime%% *}"
+  mt=$(echo "$mtime" | awk '{print $2}' | cut -d: -f1-2)
   if [[ "$base" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})[-_](.*)$ ]]; then
     d="${BASH_REMATCH[1]}"; slug="${BASH_REMATCH[2]}"
   fi
-  [ -z "$d" ] && d=$(stat -c '%d-%b-%Y' "$f")
+  [ -z "$d" ] && d="$mdate"
   size=$(stat -c %s "$f")
   if [ "$size" -ge 1048576 ]; then sz=$(awk "BEGIN{printf \"%.1f MB\", $size/1048576}")
   elif [ "$size" -ge 1024 ]; then sz=$(awk "BEGIN{printf \"%.0f KB\", $size/1024}")
   else sz="${size} B"; fi
   title=$(echo "$slug" | tr '_-' ' ')
-  echo "<a class=\"card\" href=\"$name\">"
+  echo "<div class=\"card\">"
   echo "  <div class=\"icon\">📄</div>"
-  echo "  <div class=\"title\">${title^}</div>"
-  echo "  <div class=\"meta\"><span>🗓 ${d}</span><span>💾 ${sz}</span></div>"
+  echo "  <div class=\"title\"><a href=\"$name\">${title^}</a></div>"
+  echo "  <div class=\"meta\"><span>🗓 ${d}</span><span>🕐 ${mt}</span><span>💾 ${sz}</span></div>"
   echo "  <span class=\"badge\">HTML Report</span>"
-  echo "</a>"
+  # Nút download: .html luôn có; .md chỉ tải qua /download/ (không xem trực tiếp - 404)
+  echo "  <div class=\"dl\">"
+  echo "    <a class=\"dl-btn\" href=\"/download/$name\">⬇ HTML</a>"
+  if [ -f "$DIR/${base}.md" ]; then
+    echo "    <a class=\"dl-btn\" href=\"/download/${base}.md\">⬇ .md</a>"
+  fi
+  echo "  </div>"
+  echo "</div>"
 done
 
 cat <<'FOOT'
