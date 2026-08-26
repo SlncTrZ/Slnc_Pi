@@ -2,11 +2,18 @@
 /**
  * Vision Analyzer — Phân tích ảnh (2 provider)
  *
- * Wing: code_chronicles | Topic: skill | Updated: 2026-08-17
+ * Wing: code_chronicles | Topic: skill | Updated: 2026-08-26
  *
- * - mimo  (MẶC ĐỊNH): 9router trên .227:20128 + model oc/mimo-v2.5-free
- *   (proxy OpenRouter, cost $0, vision MIMO mạnh + reasoning). Route qua IP trực tiếp
+ * Vai trò: kênh phân tích ảnh FREE + PRIVATE/offline + fallback.
+ * Model chính DeepSeek Vision Exp giờ đã CÓ vision — skill dùng khi:
+ *   - ảnh nhạy cảm (không gửi cloud DeepSeek) → ưu tiên ollama local .171
+ *   - khối lượng lớn / không muốn tốn API → 9router $0
+ *   - DeepSeek lỗi hoặc rate-limit → fallback
+ *
+ * - 9router (MẶC ĐỊNH, label `mimo`): 9router trên .227:20128 + model Olm_171/qwen3.5:9b
+ *   (9B vision + reasoning, cost $0). Route qua IP trực tiếp
  *   (domain router.truongcongdinh.org bị Cloudflare chặn non-browser UA → 403/1010).
+ *   Model cũ oc/mimo-v2.5-free đã KHÔNG còn trên 9router.
  * - ollama: qwen3-vl:2b-thinking trên .171:11434 (fallback nhẹ, kém chính xác).
  *
  * Usage:
@@ -30,7 +37,7 @@ const provider =
 
 const NINE_ROUTER_URL =
 	process.env.NINE_ROUTER_URL || "http://192.168.1.227:20128/v1";
-const NINE_ROUTER_MODEL = process.env.NINE_ROUTER_MODEL || "oc/mimo-v2.5-free";
+const NINE_ROUTER_MODEL = process.env.NINE_ROUTER_MODEL || "Olm_171/qwen3.5:9b";
 const NINE_ROUTER_KEY =
 	process.env.NINE_ROUTER_KEY || "sk-286295c6de1aed11-ckqkji-0e3cb76f";
 
@@ -71,7 +78,7 @@ async function loadBase64(imagePath) {
 	return buf.toString("base64");
 }
 
-/** Provider mimo — 9router + oc/mimo-v2.5-free (reasoning model) */
+/** Provider mimo — 9router + Olm_171/qwen3.5:9b (9B vision+reasoning model) */
 async function analyzeMimo(base64, mime, prompt) {
 	const resp = await fetch(`${NINE_ROUTER_URL}/chat/completions`, {
 		method: "POST",
