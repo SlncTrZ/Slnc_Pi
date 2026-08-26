@@ -22,7 +22,7 @@
  *
  * Environment:
  *   VISION_PROVIDER  : mimo|ollama (override default)
- *   NINE_ROUTER_KEY  : API key 9router (default: sk-286295c6de1aed11-ckqkji-0e3cb76f)
+ *   NINE_ROUTER_KEY  : API key 9router — đọc từ env / .env (KHÔNG hardcode)
  */
 
 const args = process.argv.slice(2);
@@ -38,8 +38,29 @@ const provider =
 const NINE_ROUTER_URL =
 	process.env.NINE_ROUTER_URL || "http://192.168.1.227:20128/v1";
 const NINE_ROUTER_MODEL = process.env.NINE_ROUTER_MODEL || "Olm_171/qwen3.5:9b";
-const NINE_ROUTER_KEY =
-	process.env.NINE_ROUTER_KEY || "sk-286295c6de1aed11-ckqkji-0e3cb76f";
+// Nạp .env (KHÔNG hardcode key). Ưu tiên env var; nếu thiếu, nạp từ file .env
+// (tìm từ thư mục script + parent, dừng khi gặp .git / repo root).
+{
+	const fs = await import("node:fs");
+	const path = await import("node:path");
+	const { fileURLToPath } = await import("node:url");
+	let dir = path.dirname(fileURLToPath(import.meta.url)); // chuẩn Windows (C:/...) thay vì /C:/...
+	for (let i = 0; i < 6; i++) {
+		const envPath = path.join(dir, ".env");
+		if (fs.existsSync(envPath)) {
+			for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+				const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+				if (m && !(m[1] in process.env)) {
+					process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+				}
+			}
+			break;
+		}
+		if (fs.existsSync(path.join(dir, ".git"))) break; // đã tới repo root
+		dir = path.dirname(dir);
+	}
+}
+const NINE_ROUTER_KEY = process.env.NINE_ROUTER_KEY;
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.171:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3-vl:2b-thinking";
@@ -47,6 +68,13 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3-vl:2b-thinking";
 if (!imagePath) {
 	console.error("LỖI: Thiếu đường dẫn ảnh");
 	console.error("Usage: node analyze.mjs <imagePath> [prompt] [--provider=mimo|ollama]");
+	process.exit(1);
+}
+
+if (!NINE_ROUTER_KEY) {
+	console.error("LỖI: Thiếu NINE_ROUTER_KEY.");
+	console.error("Đặt key trong .env (đã gitignore) hoặc export env: NINE_ROUTER_KEY=<key>");
+	console.error("Xem <skill_dir>/.env.example");
 	process.exit(1);
 }
 

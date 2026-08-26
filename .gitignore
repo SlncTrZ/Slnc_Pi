@@ -13,6 +13,9 @@ upstream_extensions/
 
 # Secrets (API keys, credentials)
 pi-config/secrets/auth.json
+.env
+.env.*
+!.env.example
 
 # Pi local cache
 pi-config/models-store.json

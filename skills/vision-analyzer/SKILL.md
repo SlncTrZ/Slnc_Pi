@@ -24,7 +24,7 @@ allowed-tools: bash ctx_shell
 ### ⚠️ LƯU Ý KỸ THUẬT (đã test)
 
 - **Dùng IP trực tiếp** `192.168.1.227:20128` — domain `https://router.truongcongdinh.org` bị **Cloudflare chặn** (403/1010) vì request non-browser UA
-- API key 9router: `sk-286295c6de1aed11-ckqkji-0e3cb76f` (env `NINE_ROUTER_KEY`)
+- API key 9router: đọc từ env `NINE_ROUTER_KEY` (xem **`.env`** — đã gitignore); KHÔNG hardcode trong code. Mẫu: `.env.example`
 - **Model cũ `oc/mimo-v2.5-free` đã KHÔNG còn trên 9router** (list hiện tại là `Olm_171/*` + `Olm_227/*`). Default mới = `Olm_171/qwen3.5:9b` (đã test: đọc chính xác token + full text trong ảnh)
 - 9router endpoints là **reasoning model** → cần `max_tokens` đủ lớn (~1500+), nếu content rỗng nghĩa là reasoning chiếm hết budget
 - Response có tail `data: [DONE]` (SSE) — script đã tự strip
