@@ -82,7 +82,7 @@ if (-not (Test-Path $repoDir)) {
 if (Test-Path $SLNC_PI_DIR) {
     Write-Host "  → Slnc_Pi đã tồn tại, pull update..." -ForegroundColor Gray
     Push-Location $SLNC_PI_DIR
-    git pull origin master
+    git pull origin main
     Pop-Location
 } else {
     Push-Location $repoDir

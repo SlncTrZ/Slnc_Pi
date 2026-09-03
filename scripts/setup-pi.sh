@@ -53,7 +53,7 @@ mkdir -p "$repoDir"
 
 if [ -d "$SLNC_PI_DIR" ]; then
   echo "  → Slnc_Pi đã tồn tại, pull update..."
-  cd "$SLNC_PI_DIR" && git pull origin master
+  cd "$SLNC_PI_DIR" && git pull origin main
 else
   cd "$repoDir"
   git clone https://github.com/SlncTrZ/Slnc_Pi.git

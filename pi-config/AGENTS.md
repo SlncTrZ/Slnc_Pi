@@ -51,9 +51,9 @@ Luồng chuẩn: Research → ADR/quyết định → Roadmap → Code → Nghi�
 
 ## 5. GITHUB PROTOCOL
 
-- **PRE-CHANGE:** `git status` → `git pull origin master` → verify repo đúng
-- **POST-CHANGE:** `git add .` → `git commit -m "Fix/Feat/Refactor: msg"` → `git push origin master`
-- **REPO MAP:** search KB domain `ops` topic `repo_map` | **RULES:** branch `master`, no `.env`/secrets, `.gitignore` hợp lệ
+- **PRE-CHANGE:** `git status` → `git pull origin main` → verify repo đúng
+- **POST-CHANGE:** `git add .` → `git commit -m "Fix/Feat/Refactor: msg"` → `git push origin main`
+- **REPO MAP:** search KB domain `ops` topic `repo_map` | **RULES:** branch `main`, no `.env`/secrets, `.gitignore` hợp lệ
 
 ## 6. DEV WORKFLOW
 
