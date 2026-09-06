@@ -25,6 +25,19 @@ allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 | Lưu hội thoại | `meilin_brain_conversation_save` | vào `cyberbrain_episodic` |
 | Tra hội thoại | `meilin_brain_conversation_recall` | semantic search hội thoại |
 | Timeline entity | `meilin_brain_knowledge_timeline` | xem lịch sử tiến hóa |
+| **Contract guide** | `meilin_brain_help` | đọc provider contract + tool-current — **chạy trước** khi cần biết tool/version/hash |
+| Tra cứu memory | `meilin_brain_memory_search` | tra memory (knowledge + episodic) |
+| Lưu memory | `meilin_brain_memory_store` | lưu memory |
+| Lưu tri thức (legacy) | `meilin_brain_tech_store` | auto-classify 6-wing |
+| Tra tri thức (legacy) | `meilin_brain_tech_find` | search toàn KB |
+| **Dreaming enqueue** | `meilin_brain_dream_enqueue` | tạo queue Dreaming/Reasoning — **gọi sau `conversation_save` cuối phiên** |
+| Dreaming claim | `meilin_brain_dream_reason_claim` | claim 1 session để suy tưởng |
+| Dreaming submit | `meilin_brain_dream_reason_submit` | nộp kết quả suy tưởng |
+| Dream review list | `meilin_brain_dream_reviews` | liệt kê candidate cần review |
+| Dream review resolve | `meilin_brain_dream_review_resolve` | approve/reject 1 candidate |
+| Dream status | `meilin_brain_dream_status` | trạng thái queue Dreaming |
+
+> 💡 meilin-brain = **Cyberbrain thuần** — streamable-http qua URL `https://meilin-mcp.truongcongdinh.org/mcp` (cloudflared → `cyberbrain:8767`). Tool set đầy đủ Cyberbrain (17 tool, gồm `help` + `dream_*` + `memory_*`).
 
 > 📌 Các phần bên dưới (REST API + embedding thủ công) chỉ là **tài liệu tham khảo cấp thấp** — dùng khi MCP không có sẵn / cần debug trực tiếp. Vận hành bình thường: **MCP-first**.
 
@@ -373,13 +386,14 @@ async function conversationRecall({ query, agent_name, limit }) {
 }
 ```
 
-### 7.3 Auto-save conversation cho Pi
+### 7.3 Auto-save conversation cho Pi (CUỐI PHIÊN — BẮT BUỘC 2 bước)
 
 **Cơ chế:** Cuối mỗi session (hoặc mỗi N tin nhắn), tự động:
 
 1. Tóm tắt conversation thành 1-3 câu
-2. Lưu vào `cyberbrain_episodic` với `agent_name: 'pi'`
-3. (Optional) Export ra file `.md` trong thư mục chỉ định
+2. Lưu vào `cyberbrain_episodic` với `agent_name: 'pi'` — `meilin_brain_conversation_save`
+3. **`meilin_brain_dream_enqueue`** → tạo queue **Dreaming/Reasoning** (evidence-gated) để hệ thống bên dưới tự suy tưởng. **BẮT BUỘC gọi sau `conversation_save`, đúng thứ tự.**
+4. (Optional) Export ra file `.md` trong thư mục chỉ định
 
 ---
 
