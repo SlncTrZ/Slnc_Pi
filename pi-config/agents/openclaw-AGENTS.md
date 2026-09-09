@@ -57,8 +57,8 @@ Capture what matters. Decisions, context, things to remember.
 
 ### QDRANT TRUY CẬP (QUA MCP — BẮT BUỘC)
 
-- **Lưu:** `meilin_brain_knowledge_store` {content, wing, topic, entity_name, entity_type, importance} — MCP tự tạo embedding + upsert (768d).
-- **Tra cứu:** `meilin_brain_knowledge_search` (tri thức) | `meilin_brain_ai_memory_read` (ký ức) | `meilin_brain_conversation_recall` (hội thoại).
+- **Lưu:** `meilin_brain_knowledge_store` {content, domain, topic, entity_type, entity_name} (V2 bắt buộc) + optional V2 `verification/origin/provenance_type/importance/change_reason/summary/project/negative_knowledge` — MCP tự tạo embedding + upsert. Dùng `domain` (không phải `wing`; `wing` = alias tương thích).
+- **Tra cứu:** `meilin_brain_knowledge_search` (tri thức) | `meilin_brain_memory_search` (ký ức, canonical) | `meilin_brain_ai_memory_read` (legacy combined) | `meilin_brain_conversation_recall` (hội thoại legacy). Compact-first; cần full → `knowledge_get`/`memory_get`.
 - **Không gửi payload trần thiếu vector** — luôn đi qua MCP server.
 
 ## 4. GITHUB PROTOCOL

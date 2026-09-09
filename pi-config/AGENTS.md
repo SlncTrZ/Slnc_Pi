@@ -14,7 +14,7 @@ User: Trương Công Định (SlncTrZ)
 ### 3-Tier Prioritization
 1. **Tier 1 (Ground Truth):** đọc file / kiểm tra trực tiếp → đủ info thì SKIP RAG
 2. **Tier 2:** Task mới → Skip RAG | Debug/liên quan → Tier 3
-3. **Tier 3 (RAG):** KB qua MCP meilin-brain: `meilin_brain_knowledge_search` (kỹ thuật) / `meilin_brain_ai_memory_read` (ký ức). Query 3-5 keywords.
+3. **Tier 3 (RAG):** KB qua MCP meilin-brain: `meilin_brain_knowledge_search` (kỹ thuật) / `meilin_brain_memory_search` (ký ức — canonical) | `meilin_brain_ai_memory_read` (legacy combined). Query 3-5 keywords.
 
 **NO CONFIRMATION, NO WRITE:** Chỉ `write_to_file` / `edit` sau user gõ "Proceed".
 
@@ -44,10 +44,13 @@ Luồng chuẩn: Research → ADR/quyết định → Roadmap → Code → Nghi�
 
 ## 4. POST-ACTION — LOG KB (BẮT BUỘC)
 
-- Mỗi thay đổi code/deploy → `meilin_brain_knowledge_store` (MCP meilin-brain) vào `cyberbrain_knowledge`, wing/domain: code|ops|hardware|research
-- Cuối session → `meilin_brain_conversation_save` vào `cyberbrain_episodic`
+- Mỗi thay đổi code/deploy → `meilin_brain_knowledge_store` (MCP meilin-brain) vào `cyberbrain_knowledge`. **Schema V2:** bắt buộc `content`, `domain`, `topic`, `entity_type`, `entity_name`; khuyến nghị `verification`, `provenance_type`, `origin`, `importance`, `change_reason`, `summary`, `project`; `negative_knowledge` mặc định `false`. **Domain** = `code|ops|hardware|research` (canonical dùng `domain`; `wing` = alias tương thích). KHÔNG tự đặt `identity_trust=authenticated`/`record_class` khi chưa có trusted bind.
+- Cuối session → `meilin_brain_conversation_save` (hoặc canonical `meilin_brain_memory_store` với `session_id` + `event_time`) vào `cyberbrain_episodic`
 - ⚠️ KHÔNG viết node script / REST thủ công để log KB — MCP đã xử lý embedding sẵn
-- Tra cứu: `knowledge_search` | `ai_memory_read` | `conversation_recall`
+- **Compact-first recall:** `knowledge_search`/`memory_search` mặc định `view=compact` (trả `recall_text` rút gọn + `content_omitted=true`). Cần full → lấy 1 ID rồi gọi `knowledge_get`/`memory_get`. `view=full` chỉ khi thật sự cần.
+- **Ranh giới recall V2:** search thường chỉ trả `status=active` + `record_class=knowledge` + `ordinary_recall=true`. Self-Model hypotheses, migration-quarantine, record bị M7 suppress KHÔNG vào ordinary recall.
+- **Tool set meilin-brain = CyberBrain v0.2.0** (server `https://meilin-mcp.truongcongdinh.org/mcp`, `schema_version=2`; tool gọi qua gateway có tiền tố `meilin_brain_`): **19 canonical** (`help`, `knowledge_search`, `knowledge_get`, `knowledge_store`, `knowledge_timeline`, `memory_search`, `memory_get`, `memory_store`, `prediction_record`, `prediction_resolve`, `prediction_observe`, `prediction_pending`, `calibration_observe`, `dream_enqueue`, `dream_status`, `dream_reason_claim`, `dream_reason_submit`, `dream_reviews`, `dream_review_resolve`) + **5 legacy-alias** (`tech_store`, `tech_find`, `ai_memory_read`, `conversation_save`, `conversation_recall`). Chạy `meilin_brain_help` trước để đọc contract/version/hash.
+- **Prediction/Calibration** là surface causal-learning tuỳ chọn; KHÔNG bịa Prediction sau khi đã biết kết quả. Tra cứu: `meilin_brain_knowledge_search` | `meilin_brain_memory_search` (canonical) | `meilin_brain_ai_memory_read` (legacy combined)
 
 ## 5. GITHUB PROTOCOL
 

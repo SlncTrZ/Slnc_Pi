@@ -1,13 +1,12 @@
 ---
 name: meilin-kb
 description: >
-  Giao tiếp với MeiLin Cyber Brain trên Qdrant (2 collection duy nhất:
-  cyberbrain_knowledge + cyberbrain_episodic). Dùng để lưu trữ (knowledge_store),
-  tra cứu (knowledge_search), conversation memory, và Post-Action logging.
+  Giao tiếp với MeiLin Cyber Brain v0.2.0 (schema V2) trên Qdrant (2 collection duy nhất:
+  cyberbrain_knowledge + cyberbrain_episodic). Dùng để lưu trữ (knowledge_store/memory_store),
+  tra cứu (knowledge_search/memory_search), conversation memory, và Post-Action logging.
   BẮT BUỘC khi làm việc với knowledge base, server .227, hoặc cần memory recall.
-  ⚠️ CHUẨN: dùng MCP tools server meilin-brain (meilin_brain_knowledge_store /
-  _knowledge_search / _ai_memory_read / _conversation_save / _conversation_recall) —
-  KHÔNG viết node script / fetch REST thủ công.
+  ⚠️ CHUẨN: dùng MCP tools server meilin-brain (canonical: meilin_brain_knowledge_store /
+  _knowledge_search / _memory_search / _memory_store) — KHÔNG viết node script / fetch REST thủ công.
 allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 ---
 
@@ -19,25 +18,34 @@ allowed-tools: bash read write edit ctx_shell ctx_read ctx_grep
 
 | Mục đích | MCP tool (server meilin-brain) | Ghi chú |
 | ---------- | ------------------------------ | ------- |
-| Lưu tri thức / action log | `meilin_brain_knowledge_store` | Schema: `{content, wing, topic, entity_name, entity_type, importance, change_reason}` — `wing` = code\|ops\|hardware\|research |
-| Tìm kiếm ngữ nghĩa (kỹ thuật) | `meilin_brain_knowledge_search` | query 3-5 keywords; score ≥ 0.7 cho wiki-first |
-| Đọc ký ức AI | `meilin_brain_ai_memory_read` | ký ức phiên / conversation |
-| Lưu hội thoại | `meilin_brain_conversation_save` | vào `cyberbrain_episodic` |
-| Tra hội thoại | `meilin_brain_conversation_recall` | semantic search hội thoại |
+| Lưu tri thức / action log | `meilin_brain_knowledge_store` | Canonical bắt buộc: `{content, domain, topic, entity_type, entity_name}` + optional V2 `verification/provenance_type/origin/importance/change_reason/summary/project/confidence/negative_knowledge/context/extensions`. `domain` = code\|ops\|hardware\|research |
+| Tìm kiếm ngữ nghĩa (kỹ thuật) | `meilin_brain_knowledge_search` | query 3-5 keywords; score ≥ 0.7 cho wiki-first; mặc định `view=compact` |
+| Fetch chính xác 1 Knowledge | `meilin_brain_knowledge_get` | theo exact UUID ID (không search lại); dùng sau `knowledge_search` khi cần full row |
+| Đọc ký ức AI | `meilin_brain_ai_memory_read` | ký ức phiên / conversation (legacy combined) |
+| Lưu hội thoại | `meilin_brain_conversation_save` | vào `cyberbrain_episodic` (legacy alias → `memory_store`) |
+| Tra hội thoại | `meilin_brain_conversation_recall` | semantic search hội thoại (legacy full-payload) |
 | Timeline entity | `meilin_brain_knowledge_timeline` | xem lịch sử tiến hóa |
-| **Contract guide** | `meilin_brain_help` | đọc provider contract + tool-current — **chạy trước** khi cần biết tool/version/hash |
-| Tra cứu memory | `meilin_brain_memory_search` | tra memory (knowledge + episodic) |
-| Lưu memory | `meilin_brain_memory_store` | lưu memory |
-| Lưu tri thức (legacy) | `meilin_brain_tech_store` | auto-classify 6-wing |
-| Tra tri thức (legacy) | `meilin_brain_tech_find` | search toàn KB |
+| **Contract guide** | `meilin_brain_help` | đọc provider contract + tool-current — **chạy trước** khi cần biết tool/version/hash. Trả `provider_version=0.2.0`, `schema_version=2` |
+| Tra cứu memory | `meilin_brain_memory_search` | filter session/channel/role/agent/project/topic; mặc định `view=compact` |
+| Fetch chính xác 1 Episode | `meilin_brain_memory_get` | theo exact UUID ID (không search lại) |
+| Lưu memory | `meilin_brain_memory_store` | cần `session_id` + `event_time`; mặc định `dream_status=pending` |
+| Prediction record | `meilin_brain_prediction_record` | lưu `expected_outcome` + `confidence` TRƯỚC khi biết kết quả (causal-learning, không bịa sau) |
+| Prediction resolve | `meilin_brain_prediction_resolve` | nối `observed_outcome` → 1 `prediction_id`, sinh prediction-error |
+| Prediction observe | `meilin_brain_prediction_observe` | read-only aggregate Prediction/Outcome |
+| Prediction pending | `meilin_brain_prediction_pending` | read-only worklist prediction chưa resolve |
+| Calibration observe | `meilin_brain_calibration_observe` | read-only phân tích resolved prediction (calibration bias/error) |
+| Lưu tri thức (legacy) | `meilin_brain_tech_store` | alias → `knowledge_store` |
+| Tra tri thức (legacy) | `meilin_brain_tech_find` | alias → `knowledge_search` |
 | **Dreaming enqueue** | `meilin_brain_dream_enqueue` | tạo queue Dreaming/Reasoning — **gọi sau `conversation_save` cuối phiên** |
+| Dreaming status | `meilin_brain_dream_status` | trạng thái queue Dreaming |
 | Dreaming claim | `meilin_brain_dream_reason_claim` | claim 1 session để suy tưởng |
 | Dreaming submit | `meilin_brain_dream_reason_submit` | nộp kết quả suy tưởng |
 | Dream review list | `meilin_brain_dream_reviews` | liệt kê candidate cần review |
 | Dream review resolve | `meilin_brain_dream_review_resolve` | approve/reject 1 candidate |
-| Dream status | `meilin_brain_dream_status` | trạng thái queue Dreaming |
 
-> 💡 meilin-brain = **Cyberbrain thuần** — streamable-http qua URL `https://meilin-mcp.truongcongdinh.org/mcp` (cloudflared → `cyberbrain:8767`). Tool set đầy đủ Cyberbrain (17 tool, gồm `help` + `dream_*` + `memory_*`).
+> 🔑 **Namespace:** tool thực tế gọi qua gateway có tiền tố `meilin_brain_` (vd `meilin_brain_knowledge_search`). **CyberBrain v0.2.0 — 24 tool = 19 canonical + 5 legacy-alias.** Canonical dùng `domain` (không phải `wing`); `wing` chỉ là alias tương thích. Recall mặc định `view=compact`.
+
+> 💡 meilin-brain = **Cyberbrain v0.2.0** — streamable-http qua URL `https://meilin-mcp.truongcongdinh.org/mcp` (cloudflared → `cyberbrain:8767`). Tool set đầy đủ Cyberbrain (**24 tool**, gồm `help` + `dream_*` + `memory_*` + `knowledge_get`/`memory_get` + `prediction_*`/`calibration_observe`).
 
 > 📌 Các phần bên dưới (REST API + embedding thủ công) chỉ là **tài liệu tham khảo cấp thấp** — dùng khi MCP không có sẵn / cần debug trực tiếp. Vận hành bình thường: **MCP-first**.
 
@@ -197,25 +205,43 @@ async function episodicStore({ content, agent_name, project, session_id }) {
 }
 ```
 
-### 3.3 Payload Schema (knowledge)
+### 3.3 Payload Schema (knowledge) — V2 (schema_version=2)
+
+> Canonical V2. Required: `content`, `domain`, `topic`, `entity_type`, `entity_name`, `record_class=knowledge`, `identity_trust`*, `lifecycle_state`, `ordinary_recall`. Ngoài MCP, khi debug REST: `wing` (alias) = `domain`.
 
 ```json
 {
+  "schema_version": 2,
+  "record_type": "knowledge",
+  "record_class": "knowledge",
   "content": "string (nội dung chính)",
   "domain": "code|ops|hardware|research",
-  "project": "string (tên dự án, optional)",
-  "source": "string (file/nguồn gốc, optional)",
   "topic": "string (chủ đề, ví dụ: docker_config, code_evolution, skill)",
-  "entity_name": "string (tên entity, optional)",
-  "entity_type": "function|class|concept|skill|config|document_chunk|message|technical_note",
-  "version": "number (bắt đầu từ 1)",
-  "status": "active|deprecated",
-  "timestamp": "ISO 8601 (2026-08-11T14:00:00.000Z)",
-  "summary": "string (max 200 ký tự)",
+  "entity_name": "string (tên entity)",
+  "entity_type": "function|class|concept|skill|config|document_chunk|message|technical_note|decision",
+  "project": "string (tên dự án, optional)",
+  "summary": "string (tối đa 1.200 ký tự cho compact recall)",
+  "verification": "user_confirmed|observed|tested|derived|research|unverified",
+  "origin": "manual|agent|ingestion|dream|migration|cognition",
+  "importance": "high|medium|low",
+  "identity_trust": "unspecified|legacy_untrusted|authenticated|system_derived",
+  "version": 1,
+  "status": "active",
+  "lifecycle_state": "active",
+  "ordinary_recall": true,
+  "retention_score": 1.0,
+  "retention_directive": "default",
+  "negative_knowledge": false,
   "change_reason": "string (lý do thay đổi)",
-  "importance": "high|medium|low"
+  "content_hash": "sha256",
+  "created_at": "ISO 8601 Z",
+  "updated_at": "ISO 8601 Z"
 }
 ```
+
+> ⚠️ **Ranh giới ordinary recall V2:** search thường chỉ trả `status=active` + `record_class=knowledge` + `ordinary_recall=true`. `record_class=self_model_hypothesis`, `migration_quarantine`, record có `lifecycle_state=suppressed` → KHÔNG vào ordinary recall.
+
+> 🔎 **Compact recall:** `knowledge_search`/`memory_search` mặc định `view=compact` — trả `recall_text` (summary hoặc excerpt ≤1.200 ký tự) + `content_chars` + `content_omitted=true`, ẩn `content`/`summary`. Cần đầy đủ → lấy 1 ID rồi gọi `knowledge_get`/`memory_get`; `view=full` chỉ khi thật sự cần.
 
 ---
 
@@ -315,21 +341,25 @@ async function aiMemoryRead(query) {
 
 ## 5. Post-Action Log Protocol (DÙNG MCP)
 
-> **Rule từ AGENTS.md:** Sau mỗi thay đổi code/file → gọi MCP `meilin_brain_knowledge_store` log chi tiết (file, diff, logic) — KHÔNG viết script thủ công.
+> **Rule từ AGENTS.md:** Sau mỗi thay đổi code/file → gọi MCP `meilin_brain_knowledge_store` log chi tiết (file, diff, logic) — KHÔNG viết script thủ công. Canonical dùng `domain`, không dùng `wing`.
 
 ```
 meilin_brain_knowledge_store({
   content: "[Pi Action Log] Modified file: <file>\nDiff/Summary: ...\nReason: ...\nProject: ...",
-  wing: "code",            // hoặc "ops" nếu deploy/server
-  topic: "code_evolution", // hoặc "docker_config" khi deploy .227
-  entity_name: "pi-action-...",
+  domain: "code",              // code|ops|hardware|research
+  topic: "code_evolution",     // hoặc "docker_config" khi deploy .227
   entity_type: "technical_note",
+  entity_name: "pi-action-...",
   importance: "high",
-  change_reason: "Pi action: ..."
+  verification: "observed",    // user_confirmed|observed|tested|derived|research|unverified
+  provenance_type: "agent",
+  origin: "agent",             // manual|agent|ingestion|dream|migration|cognition
+  change_reason: "Pi action: ...",
+  negative_knowledge: false
 })
 ```
 
-**Khi deploy server .227:** wing `ops`, topic `docker_config`.
+**Khi deploy server .227:** domain `ops`, topic `docker_config`.
 
 ---
 

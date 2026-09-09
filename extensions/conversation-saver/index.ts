@@ -6,9 +6,10 @@
  *   - Auto-save mỗi SAVE_THRESHOLD turn + session_shutdown + manual "lưu lại"
  *   - Mỗi session = 1 point (ID deterministic từ session_id) → upsert đè,
  *     KHÔNG trùng lặp dữ liệu như version cũ (1031 points → ~1/session)
- *     Collection: cyberbrain_episodic {content, agent_name, project, session_id, timestamp}
+ *     Collection: cyberbrain_episodic (schema V2) {content, session_id, event_time, agent,
+ *     channel, role, content_hash, identity_trust, lifecycle_state, ordinary_recall, ...}
  *
- * Wing: episodic | Topic: chat_history | Updated: 2026-08-11
+ * Wing: episodic | Topic: chat_history | Updated: 2026-09-09
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -156,29 +157,50 @@ async function upsertToQdrant(
 	const now = new Date();
 	const dateStr = now.toISOString().slice(0, 10);
 
+	const contentHash = createHash("sha256").update(content).digest("hex");
+	const eventTime = now.toISOString();
+
 	const point = {
 		id: sessionPointId(sessionId),
 		vector,
 		payload: {
+			// V2 canonical (schema_version=2)
+			schema_version: 2,
+			record_type: "episode",
 			content,
-			agent_name: "pi",
-			project: "Slnc_Pi",
 			session_id: sessionId,
-			timestamp: now.getTime(),
-			// meta
-			wing: "conversation",
-			topic: "chat_history",
-			date: dateStr,
-			entity_name: `pi_session_${dateStr}`,
-			entity_type: "daily_log",
-			summary,
-			importance: "medium",
-			status: "active",
-			version: 1,
+			event_time: eventTime,
 			channel: CHANNEL,
-			session_start: startTs,
-			change_reason: "Pi conversation auto-save via extension",
-			message_count: messageCount,
+			role: "summary",
+			agent: "pi",
+			project: "Slnc_Pi",
+			topic: "chat_history",
+			importance: "medium",
+			source: "pi_conversation",
+			summary,
+			dream_status: "pending",
+			content_hash: contentHash,
+			embedding_version: "nomic-embed-text@v1",
+			// identity_trust: direct REST write không qua trusted runtime boundary
+			identity_trust: "legacy_untrusted",
+			lifecycle_state: "active",
+			ordinary_recall: true,
+			retention_score: 1.0,
+			retention_directive: "default",
+			access_count: 0,
+			lifecycle_reason_codes: [],
+			context: {},
+			extensions: {
+				legacy_wing: "conversation",
+				entity_name: `pi_session_${dateStr}`,
+				entity_type: "daily_log",
+				date: dateStr,
+				session_start: startTs,
+				message_count: messageCount,
+				change_reason: "Pi conversation auto-save via extension",
+			},
+			created_at: eventTime,
+			updated_at: eventTime,
 		},
 	};
 
@@ -310,8 +332,8 @@ export default function (pi: ExtensionAPI) {
 		name: "save_conversation",
 		label: "Save conversation",
 		description:
-			"Lưu conversation hiện tại vào Qdrant wing conversation. Dùng khi user nói 'lưu lại'.",
-		promptSnippet: "Save current conversation to Qdrant knowledge base",
+			"Lưu conversation hiện tại vào Qdrant cyberbrain_episodic (schema V2). Dùng khi user nói 'lưu lại'.",
+		promptSnippet: "Save current conversation to Qdrant cyberbrain_episodic (V2)",
 		promptGuidelines: [
 			'When the user says "lưu lại" or "save conversation", call save_conversation tool immediately.',
 		],
@@ -347,7 +369,7 @@ export default function (pi: ExtensionAPI) {
 				content: [
 					{
 						type: "text" as const,
-						text: `✅ Đã lưu conversation (${result.saved} messages) vào Qdrant.\n\nSummary: ${summary}`,
+						text: `✅ Đã lưu conversation (${result.saved} messages) vào cyberbrain_episodic (V2).\n\nSummary: ${summary}`,
 					},
 				],
 				details: { saved: result.saved > 0, messageCount: result.saved },

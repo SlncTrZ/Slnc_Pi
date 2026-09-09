@@ -3,7 +3,7 @@
  *
  * Cơ chế:
  *   - Bắt toolResult của web_search / source_check → lưu query + answer + sources
- *     vào collection cyberbrain_knowledge (768d, Cosine, domain=research)
+ *     vào collection cyberbrain_knowledge (schema V2, 768d, Cosine, domain=research)
  *   - ID deterministic theo (query + ngày) → upsert đè, không trùng lặp
  *   - Tool manual "save_web_to_wiki" để agent chủ động lưu khi cần
  *   - Quy trình search → wiki-first nằm trong skill meilin-kb + AGENTS.md
@@ -137,28 +137,51 @@ async function upsertToWiki(
 	const dateStr = now.toISOString().slice(0, 10);
 	const topic = makeTopic(query);
 
+	const contentHash = createHash("sha256").update(content).digest("hex");
+	const nowIso = now.toISOString();
+
 	const point = {
 		id: wikiPointId(query, dateStr),
 		vector,
 		payload: {
+			// V2 canonical (schema_version=2)
+			schema_version: 2,
+			record_type: "knowledge",
+			record_class: "knowledge",
 			content,
 			domain: DOMAIN,
-			project: PROJECT,
-			source: "web_search",
-			wing: WING,
 			topic,
 			entity_name: topic,
 			entity_type: "web_research",
+			project: PROJECT,
 			version: 1,
 			status: "active",
-			timestamp: now.toISOString(),
-			change_reason: "Web research auto-save via extension",
+			verification: "research",
+			origin: "ingestion",
+			content_hash: contentHash,
+			embedding_version: "nomic-embed-text@v1",
+			// identity_trust: direct REST write không qua trusted runtime boundary
+			identity_trust: "legacy_untrusted",
+			lifecycle_state: "active",
+			ordinary_recall: true,
+			retention_score: 1.0,
+			retention_directive: "default",
+			access_count: 0,
+			lifecycle_reason_codes: [],
+			context: {},
+			extensions: {
+				legacy_wing: WING,
+				source: "web_search",
+				change_reason: "Web research auto-save via extension",
+				query,
+				queries: [query],
+				sources,
+				search_date: dateStr,
+			},
 			summary: answer.trim().substring(0, 200),
 			importance: "medium",
-			query,
-			queries: [query],
-			sources,
-			search_date: dateStr,
+			created_at: nowIso,
+			updated_at: nowIso,
 		},
 	};
 
@@ -222,8 +245,8 @@ export default function (pi: ExtensionAPI) {
 		name: "save_web_to_wiki",
 		label: "Save web research to wiki",
 		description:
-			"Lưu kết quả nghiên cứu/web search (query + answer + sources) vào Qdrant wing omniscience_wiki. Dùng sau khi tổng hợp thông tin từ web_search để tái sử dụng lần sau.",
-		promptSnippet: "Save web research result to Qdrant wiki wing",
+			"Lưu kết quả nghiên cứu/web search (query + answer + sources) vào Qdrant cyberbrain_knowledge (schema V2, domain research). Dùng sau khi tổng hợp thông tin từ web_search để tái sử dụng lần sau.",
+		promptSnippet: "Save web research result to Qdrant knowledge (domain research, V2)",
 		promptGuidelines: [
 			"After completing a web research task for the user, call save_web_to_wiki with the query and synthesized answer so it can be reused later.",
 		],
@@ -262,7 +285,7 @@ export default function (pi: ExtensionAPI) {
 						{
 							type: "text" as const,
 							text: saved
-								? `✅ Đã lưu vào wiki wing (topic: ${makeTopic(params.query)})`
+								? `✅ Đã lưu vào cyberbrain_knowledge (domain: research, topic: ${makeTopic(params.query)})`
 								: "⚠️ Answer rỗng, không lưu được",
 						},
 					],
