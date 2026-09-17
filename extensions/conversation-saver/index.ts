@@ -1,74 +1,175 @@
 /**
- * conversation-saver — Auto-save Pi conversation to Qdrant Cyber Brain.
+ * conversation-saver — Auto-save Pi conversation to Cyber Brain qua MCP (memory_store).
  *
  * Cơ chế:
- *   - Mỗi turn_end: ghi user + assistant messages vào buffer (bỏ tool calls)
+ *   - Mỗi message_end: ghi user + assistant messages vào buffer (bỏ tool calls)
  *   - Auto-save mỗi SAVE_THRESHOLD turn + session_shutdown + manual "lưu lại"
- *   - Mỗi session = 1 point (ID deterministic từ session_id) → upsert đè,
- *     KHÔNG trùng lặp dữ liệu như version cũ (1031 points → ~1/session)
- *     Collection: cyberbrain_episodic (schema V2) {content, session_id, event_time, agent,
- *     channel, role, content_hash, identity_trust, lifecycle_state, ordinary_recall, ...}
+ *   - Mỗi session = 1 record, session_id riêng (pi_<date>_<epoch>)
+ *   - GHI QUA MCP `memory_store` của CyberBrain (meilin-brain), KHÔNG tự upsert Qdrant và
+ *     KHÔNG tự tạo embedding → server sở hữu collection/embedding/lifecycle/dream queue.
  *
- * Wing: episodic | Topic: chat_history | Updated: 2026-09-09
+ * Lịch sử: bản cũ ghi thẳng REST vào Qdrant collection hardcode `cyberbrain_episodic`, đã
+ * chết im lặng sau khi CyberBrain migration đổi tên collection sang `*_v2_stage`, và tool vẫn
+ * báo ✅ dù saved=0. Bản này fail loud: lỗi được ghi log + tool trả về lỗi rõ ràng.
+ *
+ * Wing: episodic | Topic: chat_history | Updated: 2026-09-17
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 // ─── Config ──────────────────────────────────────────────────────────────
-const SECRETS_PATH =
-	process.env.QDRANT_SECRETS_PATH ||
-	require("node:path").join(
-		require("node:os").homedir(),
-		".pi",
-		"agent",
-		"secrets",
-		"qdrant.json",
-	);
+const MCP_URL =
+	process.env.CYBERBRAIN_MCP_URL || "https://meilin-mcp.truongcongdinh.org/mcp";
+const MCP_JSON = join(homedir(), ".pi", "agent", "mcp.json");
+const LOG_DIR = join(homedir(), ".pi", "agent", "logs");
+const LOG_FILE = join(LOG_DIR, "conversation-saver.log");
 
-const QDRANT_URL = process.env.QDRANT_URL || "http://192.168.1.227:6333";
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://192.168.1.227:11434";
-const EMBED_MODEL = "nomic-embed-text";
 const CHANNEL = "pi";
-const COLLECTION = "cyberbrain_episodic";
+const TOOL_NAME = "memory_store";
 const SAVE_THRESHOLD = 10; // auto-save mỗi 10 turn + shutdown + manual
-const EMBED_CHARS = 1000; // độ dài text dùng để tạo vector
+const MCP_TIMEOUT_MS = 60_000;
+const PROTOCOL_VERSION = "2025-11-25";
 
-// ─── Secrets (KHÔNG hardcode key trong source) ───────────────────────────
-let cachedApiKey: string | null = null;
-
-function loadSecrets(): {
-	qdrant: { api_key?: string };
-	ollama?: { url?: string };
-} {
+// ─── Logging (fail loud: lỗi phải để lại dấu vết trên đĩa) ───────────────
+function logFile(level: "info" | "error", message: string): void {
 	try {
-		if (existsSync(SECRETS_PATH)) {
-			return JSON.parse(readFileSync(SECRETS_PATH, "utf-8")) as {
-				qdrant: { api_key?: string };
-				ollama?: { url?: string };
-			};
-		}
-	} catch (error) {
-		console.error(
-			`[conversation-saver] Không đọc được secrets ${SECRETS_PATH}: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
+		mkdirSync(LOG_DIR, { recursive: true });
+		appendFileSync(
+			LOG_FILE,
+			`${new Date().toISOString()} [${level}] ${message}\n`,
+			"utf-8",
 		);
+	} catch {
+		// không để việc ghi log làm hỏng luồng lưu
 	}
-	return { qdrant: {} };
+	console[level === "error" ? "error" : "log"](
+		`[conversation-saver] ${level === "error" ? "❌" : "ℹ️"} ${message}`,
+	);
 }
 
-function getApiKey(): string {
-	if (cachedApiKey) return cachedApiKey;
-	cachedApiKey =
-		process.env.QDRANT_API_KEY || loadSecrets().qdrant.api_key || "";
-	if (!cachedApiKey) {
-		console.error(
-			`[conversation-saver] ⚠️ Thiếu QDRANT_API_KEY — tạo ${SECRETS_PATH} hoặc set env QDRANT_API_KEY`,
+// ─── Credential: env trước, fallback đọc mcp.json của Pi (không hardcode) ─
+let cachedToken: string | null = null;
+
+function getMcpToken(): string {
+	if (cachedToken) return cachedToken;
+	const fromEnv = (process.env.CYBERBRAIN_MCP_AUTH_TOKEN || "").trim();
+	if (fromEnv) {
+		cachedToken = fromEnv;
+		return cachedToken;
+	}
+	try {
+		if (existsSync(MCP_JSON)) {
+			const cfg = JSON.parse(readFileSync(MCP_JSON, "utf-8")) as {
+				mcpServers?: Record<string, { headers?: Record<string, string> }>;
+			};
+			for (const server of Object.values(cfg.mcpServers ?? {})) {
+				const auth = server.headers?.Authorization ?? "";
+				if (auth.toLowerCase().startsWith("bearer ")) {
+					cachedToken = auth.slice(7).trim();
+					return cachedToken;
+				}
+			}
+		}
+	} catch (error) {
+		logFile("error", `Không đọc được ${MCP_JSON}: ${String(error)}`);
+	}
+	return "";
+}
+
+// ─── Minimal MCP streamable-HTTP client ──────────────────────────────────
+let sessionId: string | null = null;
+
+function parseSsePayload(raw: string): any {
+	for (const line of raw.split(/\r?\n/)) {
+		if (!line.startsWith("data:")) continue;
+		const data = line.slice(5).trim();
+		if (!data) continue;
+		try {
+			return JSON.parse(data);
+		} catch {
+			/* thử dòng data tiếp theo */
+		}
+	}
+	throw new Error(`Không parse được SSE payload: ${raw.slice(0, 200)}`);
+}
+
+async function mcpPost(body: unknown): Promise<{ json: any; sessionId: string | null }> {
+	const token = getMcpToken();
+	if (!token) {
+		throw new Error(
+			"Thiếu credential CyberBrain (env CYBERBRAIN_MCP_AUTH_TOKEN hoặc mcp.json)",
 		);
 	}
-	return cachedApiKey;
+	const headers: Record<string, string> = {
+		Authorization: `Bearer ${token}`,
+		"Content-Type": "application/json",
+		Accept: "application/json, text/event-stream",
+	};
+	if (sessionId) headers["mcp-session-id"] = sessionId;
+
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), MCP_TIMEOUT_MS);
+	try {
+		const response = await fetch(MCP_URL, {
+			method: "POST",
+			headers,
+			body: JSON.stringify(body),
+			signal: controller.signal,
+		});
+		const newSession = response.headers.get("mcp-session-id");
+		const text = await response.text();
+		if (!response.ok) {
+			throw new Error(`MCP HTTP ${response.status}: ${text.slice(0, 300)}`);
+		}
+		return {
+			json: text.trim() ? parseSsePayload(text) : null,
+			sessionId: newSession,
+		};
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function mcpEnsureSession(): Promise<void> {
+	if (sessionId) return;
+	const { json, sessionId: sid } = await mcpPost({
+		jsonrpc: "2.0",
+		id: 1,
+		method: "initialize",
+		params: {
+			protocolVersion: PROTOCOL_VERSION,
+			capabilities: {},
+			clientInfo: { name: "pi-conversation-saver", version: "2.0" },
+		},
+	});
+	if (json?.error) throw new Error(`MCP initialize lỗi: ${JSON.stringify(json.error)}`);
+	if (!sid) throw new Error("MCP initialize không trả về mcp-session-id");
+	sessionId = sid;
+	// notification: server trả 202, không cần đọc body
+	await mcpPost({ jsonrpc: "2.0", method: "notifications/initialized" });
+}
+
+async function mcpCallTool(name: string, args: Record<string, unknown>): Promise<any> {
+	await mcpEnsureSession();
+	const { json } = await mcpPost({
+		jsonrpc: "2.0",
+		id: 2,
+		method: "tools/call",
+		params: { name, arguments: args },
+	});
+	if (json?.error) {
+		throw new Error(`MCP ${name} lỗi: ${JSON.stringify(json.error)}`);
+	}
+	const result = json?.result;
+	if (result?.isError) {
+		const detail =
+			result?.content?.[0]?.text ?? JSON.stringify(result).slice(0, 300);
+		throw new Error(`MCP ${name} trả isError: ${detail}`);
+	}
+	return result;
 }
 
 // ─── In-memory buffer ────────────────────────────────────────────────────
@@ -84,7 +185,6 @@ let sessionStartTime = 0;
 let currentSessionId = "";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
-
 function formatTimestamp(ts: number): string {
 	const d = new Date(ts);
 	return d.toLocaleTimeString("vi-VN", {
@@ -98,7 +198,6 @@ function buildConversationText(entries: ConvEntry[]): string {
 	const lines: string[] = [];
 	const date = new Date().toISOString().slice(0, 10);
 	lines.push(`# Conversation Pi — ${date}\n`);
-
 	for (const e of entries) {
 		const name = e.role === "user" ? "DinhTruong" : "MeiLin";
 		lines.push(`[${formatTimestamp(e.ts)}] ${name}: ${e.text}\n`);
@@ -114,119 +213,16 @@ function buildSummary(entries: ConvEntry[]): string {
 	return `Pi session: ${entries.length} messages | ${topic}`;
 }
 
-/** ID deterministic dạng UUID v5-like — Qdrant chỉ chấp nhận integer hoặc UUID. */
-function sessionPointId(sessionId: string): string {
-	const hash = createHash("sha256")
-		.update(`conversation:${sessionId}`)
-		.digest();
-	hash[6] = (hash[6] & 0x0f) | 0x50; // version 5
-	hash[8] = (hash[8] & 0x3f) | 0x80; // variant RFC 4122
-	const hex = hash.subarray(0, 16).toString("hex");
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
-
-// ─── Qdrant + Embedding ─────────────────────────────────────────────────
-
-async function generateEmbedding(text: string): Promise<number[]> {
-	const resp = await fetch(`${OLLAMA_URL}/api/embeddings`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ model: EMBED_MODEL, prompt: text }),
-	});
-	if (!resp.ok) {
-		throw new Error(
-			`Embedding HTTP ${resp.status}: ${await resp.text().catch(() => "")}`,
-		);
-	}
-	const data = (await resp.json()) as { embedding?: number[] };
-	if (!data.embedding || data.embedding.length !== 768) {
-		throw new Error(`Embedding failed: dims=${data.embedding?.length}`);
-	}
-	return data.embedding;
-}
-
-async function upsertToQdrant(
-	content: string,
-	summary: string,
-	messageCount: number,
-	sessionId: string,
-	startTs: number,
-): Promise<void> {
-	const embedText = content.substring(0, EMBED_CHARS) || summary;
-	const vector = await generateEmbedding(embedText);
-	const now = new Date();
-	const dateStr = now.toISOString().slice(0, 10);
-
-	const contentHash = createHash("sha256").update(content).digest("hex");
-	const eventTime = now.toISOString();
-
-	const point = {
-		id: sessionPointId(sessionId),
-		vector,
-		payload: {
-			// V2 canonical (schema_version=2)
-			schema_version: 2,
-			record_type: "episode",
-			content,
-			session_id: sessionId,
-			event_time: eventTime,
-			channel: CHANNEL,
-			role: "summary",
-			agent: "pi",
-			project: "Slnc_Pi",
-			topic: "chat_history",
-			importance: "medium",
-			source: "pi_conversation",
-			summary,
-			dream_status: "pending",
-			content_hash: contentHash,
-			embedding_version: "nomic-embed-text@v1",
-			// identity_trust: direct REST write không qua trusted runtime boundary
-			identity_trust: "legacy_untrusted",
-			lifecycle_state: "active",
-			ordinary_recall: true,
-			retention_score: 1.0,
-			retention_directive: "default",
-			access_count: 0,
-			lifecycle_reason_codes: [],
-			context: {},
-			extensions: {
-				legacy_wing: "conversation",
-				entity_name: `pi_session_${dateStr}`,
-				entity_type: "daily_log",
-				date: dateStr,
-				session_start: startTs,
-				message_count: messageCount,
-				change_reason: "Pi conversation auto-save via extension",
-			},
-			created_at: eventTime,
-			updated_at: eventTime,
-		},
-	};
-
-	const resp = await fetch(
-		`${QDRANT_URL}/collections/${COLLECTION}/points`,
-		{
-			method: "PUT",
-			headers: {
-				"api-key": getApiKey(),
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ points: [point] }),
-		},
-	);
-	if (!resp.ok) {
-		throw new Error(
-			`Qdrant upsert HTTP ${resp.status}: ${await resp.text().catch(() => "")}`,
-		);
-	}
-	const result = (await resp.json()) as { status?: string };
-	if (result.status !== "ok" && result.status !== "acknowledged") {
-		throw new Error(`Qdrant upsert failed: ${JSON.stringify(result)}`);
+function dedupeBuffer() {
+	for (let i = buffer.length - 1; i > 0; i--) {
+		if (
+			buffer[i].text === buffer[i - 1].text &&
+			buffer[i].role === buffer[i - 1].role
+		) {
+			buffer.splice(i, 1);
+		}
 	}
 }
-
-// ─── Extract text from message ──────────────────────────────────────────
 
 function extractTextFromMessage(msg: any): string {
 	if (typeof msg.content === "string") return msg.content;
@@ -239,42 +235,42 @@ function extractTextFromMessage(msg: any): string {
 	return "";
 }
 
-// ─── Save current buffer ────────────────────────────────────────────────
+// ─── Save current buffer (qua MCP, fail loud) ───────────────────────────
+interface SaveResult {
+	saved: number;
+	error?: string;
+}
 
-async function saveBuffer(): Promise<{ saved: number }> {
+async function saveBuffer(): Promise<SaveResult> {
 	if (buffer.length === 0) return { saved: 0 };
 
 	const content = buildConversationText(buffer);
 	const summary = buildSummary(buffer);
+	const messageCount = buffer.length;
 
 	try {
-		await upsertToQdrant(
+		await mcpCallTool(TOOL_NAME, {
 			content,
-			summary,
-			buffer.length,
-			currentSessionId,
-			sessionStartTime,
+			session_id: currentSessionId,
+			event_time: new Date().toISOString(),
+			channel: CHANNEL,
+			role: "summary",
+			agent: "pi",
+			project: "Slnc_Pi",
+			topic: "chat_history",
+			importance: "medium",
+			source: "pi_conversation",
+		});
+		logFile(
+			"info",
+			`Đã lưu ${messageCount} messages qua MCP ${TOOL_NAME}: ${summary.slice(0, 90)}`,
 		);
-		console.log(
-			`[conversation-saver] ✅ Saved ${buffer.length} messages: ${summary.substring(0, 80)}`,
-		);
-		return { saved: buffer.length };
-	} catch (err) {
-		console.error("[conversation-saver] ❌ Save failed:", err);
-		return { saved: 0 };
-	}
-}
-
-// ─── Clear duplicate entries (same text in a row) ───────────────────────
-
-function dedupeBuffer() {
-	for (let i = buffer.length - 1; i > 0; i--) {
-		if (
-			buffer[i].text === buffer[i - 1].text &&
-			buffer[i].role === buffer[i - 1].role
-		) {
-			buffer.splice(i, 1);
-		}
+		return { saved: messageCount };
+	} catch (error) {
+		const detail = error instanceof Error ? error.message : String(error);
+		logFile("error", `Lưu thất bại (${messageCount} messages): ${detail}`);
+		sessionId = null; // buộc bắt tay lại session MCP ở lần sau
+		return { saved: 0, error: detail };
 	}
 }
 
@@ -290,9 +286,8 @@ export default function (pi: ExtensionAPI) {
 		sessionStartTime = Date.now();
 		const dateStr = new Date(sessionStartTime).toISOString().slice(0, 10);
 		currentSessionId = `pi_${dateStr}_${sessionStartTime}`;
-		console.log(
-			`[conversation-saver] Session started: ${currentSessionId}, buffer reset`,
-		);
+		sessionId = null;
+		logFile("info", `Session started: ${currentSessionId}, buffer reset`);
 	});
 
 	// ── Message end: capture user & assistant messages only (skip tool) ─────
@@ -308,14 +303,12 @@ export default function (pi: ExtensionAPI) {
 				buffer.push({ role: "assistant", text: text.trim(), ts: Date.now() });
 			}
 		}
-		// Skip tool messages entirely
 	});
 
 	// ── Turn end: optional auto-save after N turns ──────────────────────────
 	pi.on("turn_end", async () => {
 		turnCount++;
 		dedupeBuffer();
-
 		if (SAVE_THRESHOLD > 0 && turnCount % SAVE_THRESHOLD === 0) {
 			await saveBuffer();
 		}
@@ -323,8 +316,11 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Session shutdown: save final buffer ─────────────────────────────────
 	pi.on("session_shutdown", async () => {
-		await saveBuffer();
-		console.log("[conversation-saver] Session ended, buffer saved");
+		const result = await saveBuffer();
+		logFile(
+			result.error ? "error" : "info",
+			`Session ended — saved=${result.saved}${result.error ? ` error=${result.error}` : ""}`,
+		);
 	});
 
 	// ── Register tool "save_conversation" (manual save command) ────────────
@@ -332,8 +328,8 @@ export default function (pi: ExtensionAPI) {
 		name: "save_conversation",
 		label: "Save conversation",
 		description:
-			"Lưu conversation hiện tại vào Qdrant cyberbrain_episodic (schema V2). Dùng khi user nói 'lưu lại'.",
-		promptSnippet: "Save current conversation to Qdrant cyberbrain_episodic (V2)",
+			"Lưu conversation hiện tại vào Cyber Brain qua MCP memory_store (schema V2). Dùng khi user nói 'lưu lại'.",
+		promptSnippet: "Save current conversation to Cyber Brain via MCP (V2)",
 		promptGuidelines: [
 			'When the user says "lưu lại" or "save conversation", call save_conversation tool immediately.',
 		],
@@ -365,14 +361,28 @@ export default function (pi: ExtensionAPI) {
 			const summary = buildSummary(buffer);
 			const result = await saveBuffer();
 
+			// FAIL LOUD: không bao giờ báo ✅ khi thực tế không lưu được.
+			if (result.saved === 0) {
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `❌ KHÔNG lưu được conversation (0 messages).\n\nLỗi: ${result.error ?? "buffer rỗng — không có gì để lưu"}\n\nLog: ${LOG_FILE}`,
+						},
+					],
+					details: { saved: false, messageCount: 0, error: result.error },
+					isError: true,
+				};
+			}
+
 			return {
 				content: [
 					{
 						type: "text" as const,
-						text: `✅ Đã lưu conversation (${result.saved} messages) vào cyberbrain_episodic (V2).\n\nSummary: ${summary}`,
+						text: `✅ Đã lưu conversation (${result.saved} messages) vào Cyber Brain qua MCP memory_store (V2).\n\nSummary: ${summary}`,
 					},
 				],
-				details: { saved: result.saved > 0, messageCount: result.saved },
+				details: { saved: true, messageCount: result.saved },
 			};
 		},
 	});
