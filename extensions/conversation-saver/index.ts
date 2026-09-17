@@ -30,6 +30,10 @@ const LOG_FILE = join(LOG_DIR, "conversation-saver.log");
 const CHANNEL = "pi";
 const TOOL_NAME = "memory_store";
 const SAVE_THRESHOLD = 10; // auto-save mỗi 10 turn + shutdown + manual
+// nomic-embed-text trên .227 chạy n_ctx = 2048 token. Tiếng Việt ~2.4 ký tự/token ⇒ 2048 token
+// ≈ 4900 ký tự, nhưng ollama trả 500 thay vì cắt bớt khi vượt ngưỡng, nên giữ biên an toàn.
+// 3600 ký tự ≈ 1500 token tiếng Việt / ~900 token tiếng Anh.
+const MAX_EMBED_CHARS = 3600;
 const MCP_TIMEOUT_MS = 60_000;
 const PROTOCOL_VERSION = "2025-11-25";
 
@@ -194,16 +198,73 @@ function formatTimestamp(ts: number): string {
 	});
 }
 
-function buildConversationText(entries: ConvEntry[]): string {
+function buildConversationText(
+	entries: ConvEntry[],
+	partIndex = 1,
+	partTotal = 1,
+): string {
 	const lines: string[] = [];
 	const date = new Date().toISOString().slice(0, 10);
-	lines.push(`# Conversation Pi — ${date}\n`);
+	const part = partTotal > 1 ? ` (phần ${partIndex}/${partTotal})` : "";
+	lines.push(`# Conversation Pi — ${date}${part}\n`);
 	for (const e of entries) {
 		const name = e.role === "user" ? "DinhTruong" : "MeiLin";
 		lines.push(`[${formatTimestamp(e.ts)}] ${name}: ${e.text}\n`);
 	}
 	return lines.join("");
 }
+
+/** Chi phí ký tự thật của một dòng khi render: "[HH:MM] Name: text\n". */
+function entryCost(entry: ConvEntry): number {
+	const nameLen = entry.role === "user" ? "DinhTruong".length : "MeiLin".length;
+	return 5 + 1 + nameLen + 2 + entry.text.length + 1; // timestamp + space + name + ": " + newline
+}
+
+/**
+ * Chia conversation thành nhiều phần ≤ maxChars (tính cả header + overhead format) để embedding
+ * không vượt n_ctx của nomic-embed-text. Chia theo ranh giới message; message đơn lẻ quá lớn bị
+ * cắt cứng nhưng KHÔNG bỏ nội dung.
+ */
+function chunkEntries(
+	entries: ConvEntry[],
+	maxChars: number = MAX_EMBED_CHARS,
+): ConvEntry[][] {
+	const headerBudget = 64; // "# Conversation Pi — YYYY-MM-DD (phần n/m)\n"
+	const bodyBudget = Math.max(200, maxChars - headerBudget);
+	const chunks: ConvEntry[][] = [];
+	let current: ConvEntry[] = [];
+	let size = 0;
+
+	for (const entry of entries) {
+		const cost = entryCost(entry);
+		if (cost > bodyBudget) {
+			if (current.length) {
+				chunks.push(current);
+				current = [];
+				size = 0;
+			}
+			// cắt cứng phần text sao cho cả dòng vẫn nằm trong ngân sách
+			const overhead = cost - entry.text.length;
+			const sliceSize = Math.max(100, bodyBudget - overhead);
+			for (let i = 0; i < entry.text.length; i += sliceSize) {
+				chunks.push([{ ...entry, text: entry.text.slice(i, i + sliceSize) }]);
+			}
+			continue;
+		}
+		if (current.length && size + cost > bodyBudget) {
+			chunks.push(current);
+			current = [];
+			size = 0;
+		}
+		current.push(entry);
+		size += cost;
+	}
+	if (current.length) chunks.push(current);
+	return chunks.length ? chunks : [[]];
+}
+
+// Dùng cho test tự động (test chunking mà không cần boot Pi).
+export const __internals = { chunkEntries, buildConversationText, MAX_EMBED_CHARS };
 
 function buildSummary(entries: ConvEntry[]): string {
 	if (entries.length === 0) return "Empty session";
@@ -235,43 +296,63 @@ function extractTextFromMessage(msg: any): string {
 	return "";
 }
 
-// ─── Save current buffer (qua MCP, fail loud) ───────────────────────────
+// ─── Save current buffer (chia phần theo ngân sách embedding, qua MCP) ─
 interface SaveResult {
 	saved: number;
+	parts: number;
+	failedParts: number[];
 	error?: string;
 }
 
 async function saveBuffer(): Promise<SaveResult> {
-	if (buffer.length === 0) return { saved: 0 };
+	if (buffer.length === 0) return { saved: 0, parts: 0, failedParts: [] };
 
-	const content = buildConversationText(buffer);
-	const summary = buildSummary(buffer);
-	const messageCount = buffer.length;
+	const chunks = chunkEntries(buffer);
+	const total = chunks.length;
+	let saved = 0;
+	const failedParts: number[] = [];
+	let lastError: string | undefined;
 
-	try {
-		await mcpCallTool(TOOL_NAME, {
-			content,
-			session_id: currentSessionId,
-			event_time: new Date().toISOString(),
-			channel: CHANNEL,
-			role: "summary",
-			agent: "pi",
-			project: "Slnc_Pi",
-			topic: "chat_history",
-			importance: "medium",
-			source: "pi_conversation",
-		});
-		logFile(
-			"info",
-			`Đã lưu ${messageCount} messages qua MCP ${TOOL_NAME}: ${summary.slice(0, 90)}`,
-		);
-		return { saved: messageCount };
-	} catch (error) {
-		const detail = error instanceof Error ? error.message : String(error);
-		logFile("error", `Lưu thất bại (${messageCount} messages): ${detail}`);
-		sessionId = null; // buộc bắt tay lại session MCP ở lần sau
-		return { saved: 0, error: detail };
+	for (let i = 0; i < total; i++) {
+		const part = chunks[i];
+		const content = buildConversationText(part, i + 1, total);
+		const sessionForPart = i === 0 ? currentSessionId : `${currentSessionId}-p${i + 1}`;
+		const summary = buildSummary(part);
+		try {
+			await mcpCallTool(TOOL_NAME, {
+				content,
+				session_id: sessionForPart,
+				event_time: new Date().toISOString(),
+				channel: CHANNEL,
+				role: "summary",
+				agent: "pi",
+				project: "Slnc_Pi",
+				topic: "chat_history",
+				importance: "medium",
+				source: "pi_conversation",
+				// Schema memory_store KHÔNG có field `summary` → đặt trong extensions
+				extensions: {
+				summary: total > 1 ? `${summary} [phần ${i + 1}/${total}]` : summary,
+				part_index: i + 1,
+				part_total: total,
+				message_count: part.length,
+				},
+			});
+			saved += part.length;
+			logFile(
+				"info",
+				`Đã lưu phần ${i + 1}/${total} (${part.length} messages, ${content.length} ký tự) session=${sessionForPart}`,
+			);
+		} catch (error) {
+			const detail = error instanceof Error ? error.message : String(error);
+			failedParts.push(i + 1);
+			lastError = detail;
+			logFile("error", `Phần ${i + 1}/${total} lưu thất bại: ${detail}`);
+			sessionId = null; // buộc bắt tay lại session MCP ở lần sau
+		}
 	}
+
+	return { saved, parts: total, failedParts, error: lastError };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -318,8 +399,11 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => {
 		const result = await saveBuffer();
 		logFile(
-			result.error ? "error" : "info",
-			`Session ended — saved=${result.saved}${result.error ? ` error=${result.error}` : ""}`,
+			result.failedParts.length ? "error" : "info",
+			`Session ended — saved=${result.saved} messages trong ${result.parts} phần` +
+				(result.failedParts.length
+					? ` failed_parts=${result.failedParts.join(",")} error=${result.error}`
+					: ""),
 		);
 	});
 
@@ -367,10 +451,23 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: "text" as const,
-							text: `❌ KHÔNG lưu được conversation (0 messages).\n\nLỗi: ${result.error ?? "buffer rỗng — không có gì để lưu"}\n\nLog: ${LOG_FILE}`,
+							text: `❌ KHÔNG lưu được conversation (0/${result.parts} phần).\n\nLỗi: ${result.error ?? "buffer rỗng — không có gì để lưu"}\n\nLog: ${LOG_FILE}`,
 						},
 					],
 					details: { saved: false, messageCount: 0, error: result.error },
+					isError: true,
+				};
+			}
+
+			if (result.failedParts.length > 0) {
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `⚠️ Lưu MỘT PHẦN (${result.parts - result.failedParts.length}/${result.parts} phần, ${result.saved} messages). Phần lỗi: ${result.failedParts.join(", ")}.\n\nLỗi cuối: ${result.error}\n\nLog: ${LOG_FILE}`,
+						},
+					],
+					details: { saved: true, partial: true, failedParts: result.failedParts, messageCount: result.saved },
 					isError: true,
 				};
 			}
@@ -379,10 +476,10 @@ export default function (pi: ExtensionAPI) {
 				content: [
 					{
 						type: "text" as const,
-						text: `✅ Đã lưu conversation (${result.saved} messages) vào Cyber Brain qua MCP memory_store (V2).\n\nSummary: ${summary}`,
+						text: `✅ Đã lưu conversation (${result.saved} messages, ${result.parts} phần) vào Cyber Brain qua MCP memory_store (V2).\n\nSummary: ${summary}`,
 					},
 				],
-				details: { saved: true, messageCount: result.saved },
+				details: { saved: true, messageCount: result.saved, parts: result.parts },
 			};
 		},
 	});
